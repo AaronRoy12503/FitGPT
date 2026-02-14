@@ -64,43 +64,44 @@ class OutfitRecommendationEngine {
     }
 
     fun generateItemExplanation(item: ClothingItem, preferences: UserPreferences): String {
-        val reasons = mutableListOf<String>()
+        // Collect candidate reasons — most specific first so take(2) keeps the best
+        val candidates = mutableListOf<String>()
 
-        // Season reasoning
+        // Style and body type are conditional and item-specific — prioritize them
+        val styleNote = styleNote(item, preferences)
+        if (styleNote != null) candidates.add(styleNote)
+
+        val fitNote = bodyTypeFitNote(item, preferences)
+        if (fitNote != null) candidates.add(fitNote)
+
+        // Season
         val seasonScore = seasonMatchScore(item, preferences)
         when {
-            seasonScore >= 1.0 -> reasons.add(
-                "Perfect for your preferred ${item.season.lowercase()} season"
+            seasonScore >= 1.0 -> candidates.add(
+                "Perfect for ${item.season.lowercase()}"
             )
-            item.season.equals("All", ignoreCase = true) -> reasons.add(
+            item.season.equals("All", ignoreCase = true) -> candidates.add(
                 "Versatile all-season piece"
             )
-            else -> reasons.add(
+            else -> candidates.add(
                 "Suited for ${item.season.lowercase()} weather"
             )
         }
 
-        // Comfort reasoning
+        // Comfort
         val comfortDiff = item.comfortLevel - preferences.comfortPreference
         when {
-            comfortDiff >= 1 -> reasons.add("exceeds your comfort preference")
-            comfortDiff == 0 -> reasons.add("matches your comfort level exactly")
-            comfortDiff == -1 -> reasons.add("slightly below your usual comfort preference")
-            else -> reasons.add("prioritizes style over comfort")
+            comfortDiff >= 1 -> candidates.add("exceeds your comfort preference")
+            comfortDiff == 0 -> candidates.add("matches your comfort level exactly")
+            comfortDiff == -1 -> candidates.add("slightly below your usual comfort preference")
+            else -> candidates.add("prioritizes style over comfort")
         }
 
-        // Style reasoning
-        val styleNote = styleNote(item, preferences)
-        if (styleNote != null) reasons.add(styleNote)
+        // Pick the top 2 reasons, then always append color character
+        val picked = candidates.take(2).toMutableList()
+        picked.add("${item.color.lowercase()} adds ${colorCharacter(item.color)}")
 
-        // Body type reasoning
-        val fitNote = bodyTypeFitNote(item, preferences)
-        if (fitNote != null) reasons.add(fitNote)
-
-        // Color note
-        reasons.add("${item.color.lowercase()} adds ${colorCharacter(item.color)} to your look")
-
-        return reasons.joinToString(". ") + "."
+        return picked.joinToString(". ") + "."
     }
 
     // --- Scoring ---
@@ -382,62 +383,40 @@ class OutfitRecommendationEngine {
     ): String {
         val parts = mutableListOf<String>()
 
-        // Outfit summary
-        val itemNames = outfit.joinToString(" + ") { "${it.color} ${it.category}" }
-        parts.add("Outfit: $itemNames")
-
-        // Season insight
-        val seasons = outfit.map { it.season }.toSet()
-        when {
-            seasons.all { it.equals("All", ignoreCase = true) } ->
-                parts.add("All pieces are season-versatile")
-            seasons.any { s -> preferences.preferredSeasons.any { it.equals(s, ignoreCase = true) } } ->
-                parts.add("Great match for your preferred season")
-            else ->
-                parts.add("Consider for ${seasons.joinToString("/").lowercase()} weather")
-        }
-
-        // Comfort insight
-        val avgComfort = outfit.sumOf { it.comfortLevel }.toDouble() / outfit.size
-        when {
-            avgComfort >= preferences.comfortPreference + 0.5 ->
-                parts.add("Excellent comfort level for your preference")
-            avgComfort >= preferences.comfortPreference - 0.5 ->
-                parts.add("Comfort meets your preference well")
-            else ->
-                parts.add("Comfort is a trade-off for this outfit's style")
-        }
-
-        // Color harmony insight
+        // Lead with color harmony — highest-weighted outfit factor
         val harmonyLabel = colorHarmonyLabel(outfit)
         if (harmonyLabel.isNotBlank()) {
             parts.add(harmonyLabel)
         }
 
-        // Style match
-        when (preferences.stylePreference.lowercase()) {
-            "casual" -> parts.add("Fits a relaxed, casual vibe")
-            "formal" -> parts.add("Suitable for a polished, formal look")
-            "sporty" -> parts.add("Great for an active, sporty style")
-            "streetwear" -> parts.add("On-trend for a streetwear aesthetic")
+        // Add body type insight only when the outfit has a notable fit advantage
+        val fitInsight = when (preferences.bodyType.lowercase()) {
+            "slim" -> if (outfit.any { it.category.equals("Outerwear", ignoreCase = true) })
+                "Layered pieces add depth to a slim frame" else null
+            "athletic" -> if (outfit.any { it.category.equals("Top", ignoreCase = true) })
+                "Structured tops complement your athletic build" else null
+            "plus-size" -> if (outfit.any { it.category.equals("Outerwear", ignoreCase = true) })
+                "Structured layers create a flattering silhouette"
+            else if (outfit.any { it.comfortLevel >= 4 })
+                "Comfortable fits flatter your proportions" else null
+            else -> null
+        }
+        if (fitInsight != null) parts.add(fitInsight)
+
+        // Add season or comfort only when noteworthy (avoid generic filler)
+        val seasons = outfit.map { it.season }.toSet()
+        val allSeasonMatch = seasons.all { it.equals("All", ignoreCase = true) }
+        val hasSeasonMismatch = seasons.none { s ->
+            s.equals("All", ignoreCase = true) ||
+                preferences.preferredSeasons.any { it.equals(s, ignoreCase = true) }
+        }
+        if (hasSeasonMismatch) {
+            parts.add("Consider for ${seasons.joinToString("/").lowercase()} weather")
         }
 
-        // Body type fit insight
-        when (preferences.bodyType.lowercase()) {
-            "slim" -> {
-                if (outfit.any { it.category.equals("Outerwear", ignoreCase = true) })
-                    parts.add("Layered pieces add depth to a slim frame")
-            }
-            "athletic" -> {
-                if (outfit.any { it.category.equals("Top", ignoreCase = true) })
-                    parts.add("Structured tops complement your athletic build")
-            }
-            "plus-size" -> {
-                if (outfit.any { it.category.equals("Outerwear", ignoreCase = true) })
-                    parts.add("Structured layers create a flattering silhouette")
-                else if (outfit.any { it.comfortLevel >= 4 })
-                    parts.add("Comfortable fits flatter your proportions")
-            }
+        val avgComfort = outfit.sumOf { it.comfortLevel }.toDouble() / outfit.size
+        if (avgComfort < preferences.comfortPreference - 0.5) {
+            parts.add("Trades some comfort for style")
         }
 
         // Score tier

@@ -510,7 +510,8 @@ class OutfitRecommendationEngineTest {
 
     @Test
     fun generateItemExplanation_comfortExceeds_mentionsExceeds() {
-        val prefs = defaultPreferences.copy(comfortPreference = 2)
+        // Use Formal style so no style note competes for the top-2 slots
+        val prefs = defaultPreferences.copy(comfortPreference = 2, stylePreference = "Formal")
         val item = ClothingItem(1, "Top", "Black", "Summer", 4)
         val explanation = engine.generateItemExplanation(item, prefs)
         assertTrue(explanation.contains("exceeds", ignoreCase = true))
