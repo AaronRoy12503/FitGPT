@@ -96,7 +96,7 @@ class GroqRecommendationService {
         preferences: UserPreferences
     ): String {
         val itemLines = items.joinToString("\n") { item ->
-            "${item.id} | ${item.category} | ${item.color} | ${item.season} | ${item.comfortLevel}"
+            "${item.id} | ${item.category} | ${item.color} | ${item.season} | ${item.comfortLevel} | ${item.fit}"
         }
 
         return """
@@ -108,7 +108,7 @@ USER PREFERENCES:
 - Comfort preference: ${preferences.comfortPreference}/5
 - Preferred seasons: ${preferences.preferredSeasons.joinToString(", ")}
 
-WARDROBE (ID | Category | Color | Season | Comfort):
+WARDROBE (ID | Category | Color | Season | Comfort | Fit):
 $itemLines
 
 The ONLY valid item IDs are: ${items.joinToString(", ") { it.id.toString() }}
@@ -134,10 +134,11 @@ Rules:
   - Avoid pairing 3+ unrelated bright colors without a neutral anchor
 - Also consider season matching, comfort, and the user's style preference
 - BODY TYPE FIT is important — tailor recommendations to flatter the user's proportions:
-  - Slim: layering with outerwear adds visual dimension; accessories create interest
-  - Athletic: structured tops that accommodate broader shoulders; sporty footwear complements build
-  - Plus-size: structured outerwear creates shape; prioritize comfortable fits (comfort 4+); accessories draw the eye
-  - Average: balanced proportions suit most items; focus on other factors
+  - Slim: fitted cuts accentuate the frame; oversized adds volume; layering with outerwear adds dimension
+  - Athletic: fitted cuts highlight the build; regular fits suit broad shoulders; avoid oversized on top
+  - Plus-size: relaxed fits drape comfortably; structured oversized pieces create shape; comfort 4+ preferred
+  - Average: balanced proportions suit most fits; focus on other factors
+- GARMENT FIT matters: each item has a Fit value (Fitted, Regular, Relaxed, Oversized) — match it to the user's body type
 - In EXPLANATION, explicitly describe why the colors work together and how the outfit flatters the user's body type
 - In ITEM_DETAILS, mention how each item's color contributes to the outfit's palette and how it suits the user's body type
 """.trim()

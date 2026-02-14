@@ -172,7 +172,10 @@ class OutfitRecommendationEngine {
 
     internal fun bodyTypeFitScore(item: ClothingItem, preferences: UserPreferences): Double {
         val category = item.category.lowercase()
-        return when (preferences.bodyType.lowercase()) {
+        val fit = item.fit.lowercase()
+
+        // Base score from body type + category
+        val baseScore = when (preferences.bodyType.lowercase()) {
             "slim" -> when (category) {
                 "outerwear" -> 0.9   // layering adds visual dimension
                 "accessory" -> 0.85  // draws the eye, adds interest
@@ -185,11 +188,10 @@ class OutfitRecommendationEngine {
                 else -> 0.7
             }
             "plus-size" -> {
-                // structured layers and comfortable fits flatter most
                 val comfortBoost = if (item.comfortLevel >= 4) 0.1 else 0.0
                 val base = when (category) {
-                    "outerwear" -> 0.9   // structured layers create shape
-                    "accessory" -> 0.85  // accessories draw the eye upward
+                    "outerwear" -> 0.9
+                    "accessory" -> 0.85
                     "top" -> 0.8
                     "bottom" -> 0.75
                     else -> 0.7
@@ -197,6 +199,35 @@ class OutfitRecommendationEngine {
                 (base + comfortBoost).coerceAtMost(1.0)
             }
             else -> 0.7 // "average" or unrecognized — neutral baseline
+        }
+
+        // Garment fit modifier — adjusts score based on body type + fit pairing
+        val fitBonus = garmentFitBonus(fit, preferences.bodyType.lowercase())
+
+        return (baseScore + fitBonus).coerceIn(0.0, 1.0)
+    }
+
+    internal fun garmentFitBonus(fit: String, bodyType: String): Double {
+        return when (bodyType) {
+            "slim" -> when (fit) {
+                "fitted" -> 0.1       // accentuates a slim frame
+                "oversized" -> 0.05   // adds visual volume
+                "relaxed" -> 0.0
+                else -> 0.0           // "regular" — neutral
+            }
+            "athletic" -> when (fit) {
+                "fitted" -> 0.1       // highlights athletic build
+                "regular" -> 0.05     // clean lines suit broad shoulders
+                "oversized" -> -0.05  // can look bulky on athletic frames
+                else -> 0.0
+            }
+            "plus-size" -> when (fit) {
+                "relaxed" -> 0.1      // comfortable and flattering drape
+                "oversized" -> 0.05   // structured oversized pieces create shape
+                "fitted" -> -0.05     // can feel restrictive
+                else -> 0.0
+            }
+            else -> 0.0 // "average" — all fits work equally
         }
     }
 
@@ -442,7 +473,32 @@ class OutfitRecommendationEngine {
 
     private fun bodyTypeFitNote(item: ClothingItem, preferences: UserPreferences): String? {
         val category = item.category.lowercase()
-        return when (preferences.bodyType.lowercase()) {
+        val fit = item.fit.lowercase()
+        val bodyType = preferences.bodyType.lowercase()
+
+        // Garment fit note takes priority when it's a strong pairing
+        val fitNote = when (bodyType) {
+            "slim" -> when (fit) {
+                "fitted" -> "fitted cut accentuates a slim frame"
+                "oversized" -> "oversized silhouette adds volume to a slim build"
+                else -> null
+            }
+            "athletic" -> when (fit) {
+                "fitted" -> "fitted cut highlights your athletic build"
+                "oversized" -> null // not ideal — skip
+                else -> null
+            }
+            "plus-size" -> when (fit) {
+                "relaxed" -> "relaxed fit drapes comfortably"
+                "oversized" -> "structured oversized piece creates shape"
+                else -> null
+            }
+            else -> null
+        }
+        if (fitNote != null) return fitNote
+
+        // Fall back to category-based notes
+        return when (bodyType) {
             "slim" -> when (category) {
                 "outerwear" -> "layering adds dimension to a slim frame"
                 "accessory" -> "accessories add visual interest to your silhouette"
@@ -459,7 +515,7 @@ class OutfitRecommendationEngine {
                 item.comfortLevel >= 4 -> "comfortable fit flatters your proportions"
                 else -> null
             }
-            else -> null // "average" — no specific note needed
+            else -> null
         }
     }
 

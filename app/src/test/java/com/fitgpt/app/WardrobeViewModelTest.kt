@@ -41,7 +41,8 @@ class WardrobeViewModelTest {
 
     @Test
     fun generateExplanation_containsComfortInfo() {
-        val item = ClothingItem(1, "Top", "Black", "Summer", 5)
+        // Use comfort 3 (exact match) so no style note displaces it
+        val item = ClothingItem(1, "Top", "Black", "Summer", 3)
         val explanation = viewModel.generateExplanation(item)
         assertTrue(
             explanation.contains("comfort", ignoreCase = true) ||

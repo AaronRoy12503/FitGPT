@@ -6,8 +6,8 @@ import com.fitgpt.app.data.model.SavedOutfit
 class FakeWardrobeRepository : WardrobeRepository {
 
     private val wardrobeItems = mutableListOf(
-        ClothingItem(1, "Top", "Black", "Winter", 3),
-        ClothingItem(2, "Bottom", "Blue", "All", 4)
+        ClothingItem(1, "Top", "Black", "Winter", 3, "Fitted"),
+        ClothingItem(2, "Bottom", "Blue", "All", 4, "Regular")
     )
 
     private val savedOutfits = mutableListOf<SavedOutfit>()

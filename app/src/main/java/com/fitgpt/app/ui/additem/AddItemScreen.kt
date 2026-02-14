@@ -22,9 +22,13 @@ fun AddItemScreen(
     var season by remember { mutableStateOf("All") }
     var seasonExpanded by remember { mutableStateOf(false) }
 
+    var fit by remember { mutableStateOf("Regular") }
+    var fitExpanded by remember { mutableStateOf(false) }
+
     var comfortLevel by remember { mutableStateOf(3f) }
 
     val seasons = listOf("All", "Winter", "Spring", "Summer", "Fall")
+    val fits = listOf("Fitted", "Regular", "Relaxed", "Oversized")
 
     Scaffold(
         topBar = {
@@ -84,6 +88,36 @@ fun AddItemScreen(
                 }
             }
 
+            ExposedDropdownMenuBox(
+                expanded = fitExpanded,
+                onExpandedChange = { fitExpanded = !fitExpanded }
+            ) {
+                OutlinedTextField(
+                    value = fit,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Fit") },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
+
+                ExposedDropdownMenu(
+                    expanded = fitExpanded,
+                    onDismissRequest = { fitExpanded = false }
+                ) {
+                    fits.forEach {
+                        DropdownMenuItem(
+                            text = { Text(it) },
+                            onClick = {
+                                fit = it
+                                fitExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
             Text("Comfort Level: ${comfortLevel.toInt()}")
             Slider(
                 value = comfortLevel,
@@ -102,7 +136,8 @@ fun AddItemScreen(
                             category = category,
                             color = color,
                             season = season,
-                            comfortLevel = comfortLevel.toInt()
+                            comfortLevel = comfortLevel.toInt(),
+                            fit = fit
                         )
                     )
                     navController.popBackStack()

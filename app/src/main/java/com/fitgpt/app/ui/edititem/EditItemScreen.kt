@@ -10,6 +10,7 @@ import androidx.navigation.NavController
 import com.fitgpt.app.data.model.ClothingItem
 import com.fitgpt.app.viewmodel.WardrobeViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditItemScreen(
     navController: NavController,
@@ -29,6 +30,9 @@ fun EditItemScreen(
     var color by remember { mutableStateOf(item.color) }
     var season by remember { mutableStateOf(item.season) }
     var comfort by remember { mutableStateOf(item.comfortLevel.toString()) }
+    var fit by remember { mutableStateOf(item.fit) }
+    var fitExpanded by remember { mutableStateOf(false) }
+    val fits = listOf("Fitted", "Regular", "Relaxed", "Oversized")
 
     Column(
         modifier = Modifier
@@ -73,9 +77,41 @@ fun EditItemScreen(
         OutlinedTextField(
             value = comfort,
             onValueChange = { comfort = it },
-            label = { Text("Comfort Level (1–5)") },
+            label = { Text("Comfort Level (1-5)") },
             modifier = Modifier.fillMaxWidth()
         )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ExposedDropdownMenuBox(
+            expanded = fitExpanded,
+            onExpandedChange = { fitExpanded = !fitExpanded }
+        ) {
+            OutlinedTextField(
+                value = fit,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Fit") },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+
+            ExposedDropdownMenu(
+                expanded = fitExpanded,
+                onDismissRequest = { fitExpanded = false }
+            ) {
+                fits.forEach {
+                    DropdownMenuItem(
+                        text = { Text(it) },
+                        onClick = {
+                            fit = it
+                            fitExpanded = false
+                        }
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -85,7 +121,8 @@ fun EditItemScreen(
                     category = category,
                     color = color,
                     season = season,
-                    comfortLevel = comfort.toIntOrNull() ?: item.comfortLevel
+                    comfortLevel = comfort.toIntOrNull() ?: item.comfortLevel,
+                    fit = fit
                 )
 
                 viewModel.updateItem(updatedItem)

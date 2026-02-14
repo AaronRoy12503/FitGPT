@@ -129,7 +129,9 @@ Rewards outfits that cover more garment categories:
 
 ## Body Type Fit Scoring
 
-Each body type has category-specific multipliers:
+The body type score combines a **category base score** with a **garment fit modifier**.
+
+### Category Base Scores
 
 | Body Type | Favored Categories | Rationale |
 |-----------|--------------------|-----------|
@@ -137,6 +139,19 @@ Each body type has category-specific multipliers:
 | **Athletic** | Tops (0.9), Shoes (0.85), Bottoms (0.8) | Accommodates broader build |
 | **Plus-size** | Outerwear (0.9), Accessories (0.85), Tops (0.8) | Structured layers create shape; +0.1 comfort bonus for items >= 4 |
 | **Average** | All categories (0.7) | Neutral baseline |
+
+### Garment Fit Modifier
+
+Each `ClothingItem` has a `fit` field with one of four values: **Fitted**, **Regular**, **Relaxed**, **Oversized**. The fit modifier adjusts the base score:
+
+| Body Type | Fitted | Regular | Relaxed | Oversized |
+|-----------|--------|---------|---------|-----------|
+| **Slim** | +0.10 (accentuates frame) | 0.00 | 0.00 | +0.05 (adds volume) |
+| **Athletic** | +0.10 (highlights build) | +0.05 (clean lines) | 0.00 | -0.05 (can look bulky) |
+| **Plus-size** | -0.05 (can feel restrictive) | 0.00 | +0.10 (comfortable drape) | +0.05 (creates shape) |
+| **Average** | 0.00 | 0.00 | 0.00 | 0.00 |
+
+Final score = `(baseScore + fitBonus).coerceIn(0.0, 1.0)`
 
 ---
 
@@ -274,7 +289,7 @@ The AI response is parsed back into `OutfitRecommendation` objects and replaces 
 | `app/src/main/java/com/fitgpt/app/ai/GroqRecommendationService.kt` | AI-powered recommendations via Groq API |
 | `app/src/main/java/com/fitgpt/app/ai/GroqChatService.kt` | Fashion chatbot service |
 | `app/src/main/java/com/fitgpt/app/viewmodel/WardrobeViewModel.kt` | Orchestration, history tracking, state management |
-| `app/src/main/java/com/fitgpt/app/data/model/ClothingItem.kt` | Core data model (id, category, color, season, comfort) |
+| `app/src/main/java/com/fitgpt/app/data/model/ClothingItem.kt` | Core data model (id, category, color, season, comfort, fit) |
 | `app/src/main/java/com/fitgpt/app/data/model/OutfitRecommendation.kt` | Recommendation output model |
 | `app/src/main/java/com/fitgpt/app/data/model/UserPreferences.kt` | User profile (body type, style, comfort, seasons) |
 | `app/src/test/java/com/fitgpt/app/OutfitRecommendationEngineTest.kt` | Unit tests for scoring, harmony, and repeat prevention |

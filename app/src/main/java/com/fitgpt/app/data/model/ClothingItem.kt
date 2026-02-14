@@ -6,5 +6,6 @@ data class ClothingItem(
     val color: String,
     val season: String,
     val comfortLevel: Int,
+    val fit: String = "Regular",
     val imageUrl: String? = null
 )
