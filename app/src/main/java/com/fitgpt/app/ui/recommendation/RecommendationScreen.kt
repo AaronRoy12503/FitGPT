@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 
 package com.fitgpt.app.ui.recommendation
 
@@ -248,8 +248,9 @@ private fun RecommendationCard(recommendation: OutfitRecommendation) {
             Spacer(modifier = Modifier.height(8.dp))
 
             // Scoring factor chips
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 val seasons = recommendation.items.map { it.season.lowercase() }.toSet()
                 val hasSeasonMatch = seasons.any { it == "all" } || seasons.size <= 2
@@ -331,13 +332,14 @@ private fun RecommendationCard(recommendation: OutfitRecommendation) {
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = "${item.color} ${item.category}:",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        modifier = Modifier.width(110.dp)
+                                        style = MaterialTheme.typography.labelMedium
                                     )
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = itemExplanation,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
                             }
@@ -375,6 +377,7 @@ private fun colorNameToColor(name: String): Color {
         "indigo" -> Color(0xFF3949AB)
         "magenta" -> Color(0xFFAD1457)
         "mint" -> Color(0xFF80CBC4)
+        "peach" -> Color(0xFFFFAB91)
         else -> Color(0xFF78909C)
     }
 }
