@@ -28,7 +28,9 @@ class PreferencesManager(context: Context) {
             bodyType = prefs.getString(KEY_BODY_TYPE, "Average") ?: "Average",
             stylePreference = prefs.getString(KEY_STYLE, "Casual") ?: "Casual",
             comfortPreference = prefs.getInt(KEY_COMFORT, 3),
-            preferredSeasons = prefs.getStringSet(KEY_SEASONS, null)?.toList()
+            preferredSeasons = prefs.getStringSet(KEY_SEASONS, null)
+                ?.toList()
+                ?.ifEmpty { null }
                 ?: listOf("Spring", "Summer", "Fall", "Winter"),
             accessibilityModeEnabled = prefs.getBoolean(KEY_ACCESSIBILITY, false)
         )

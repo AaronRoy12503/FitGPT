@@ -166,12 +166,15 @@ fun OnboardingScreen(
         // Get Started button
         Button(
             onClick = {
+                val seasons = selectedSeasons.toList().ifEmpty {
+                    PreferenceOptions.allSeasons
+                }
                 onComplete(
                     UserPreferences(
                         bodyType = bodyType,
                         stylePreference = stylePreference,
                         comfortPreference = comfortPreference.toInt(),
-                        preferredSeasons = selectedSeasons.toList()
+                        preferredSeasons = seasons
                     )
                 )
             },
