@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.fitgpt.app.data.model.ClothingCategory
+import com.fitgpt.app.data.model.ClothingColor
 import com.fitgpt.app.data.model.ClothingItem
 import com.fitgpt.app.viewmodel.WardrobeViewModel
 
@@ -30,10 +31,13 @@ fun EditItemScreen(
     var category by remember { mutableStateOf(item.category) }
     var categoryExpanded by remember { mutableStateOf(false) }
     var color by remember { mutableStateOf(item.color) }
+    var colorExpanded by remember { mutableStateOf(false) }
     var season by remember { mutableStateOf(item.season) }
-    var comfort by remember { mutableStateOf(item.comfortLevel.toString()) }
+    var seasonExpanded by remember { mutableStateOf(false) }
+    var comfortLevel by remember { mutableStateOf(item.comfortLevel.toFloat()) }
     var fit by remember { mutableStateOf(item.fit) }
     var fitExpanded by remember { mutableStateOf(false) }
+    val seasons = listOf("All", "Winter", "Spring", "Summer", "Fall")
     val fits = listOf("Fitted", "Regular", "Relaxed", "Oversized")
 
     Column(
@@ -81,29 +85,76 @@ fun EditItemScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedTextField(
-            value = color,
-            onValueChange = { color = it },
-            label = { Text("Color") },
-            modifier = Modifier.fillMaxWidth()
-        )
+        ExposedDropdownMenuBox(
+            expanded = colorExpanded,
+            onExpandedChange = { colorExpanded = !colorExpanded }
+        ) {
+            OutlinedTextField(
+                value = color,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Color") },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+
+            ExposedDropdownMenu(
+                expanded = colorExpanded,
+                onDismissRequest = { colorExpanded = false }
+            ) {
+                ClothingColor.ALL.forEach {
+                    DropdownMenuItem(
+                        text = { Text(it) },
+                        onClick = {
+                            color = it
+                            colorExpanded = false
+                        }
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedTextField(
-            value = season,
-            onValueChange = { season = it },
-            label = { Text("Season") },
-            modifier = Modifier.fillMaxWidth()
-        )
+        ExposedDropdownMenuBox(
+            expanded = seasonExpanded,
+            onExpandedChange = { seasonExpanded = !seasonExpanded }
+        ) {
+            OutlinedTextField(
+                value = season,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Season") },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+
+            ExposedDropdownMenu(
+                expanded = seasonExpanded,
+                onDismissRequest = { seasonExpanded = false }
+            ) {
+                seasons.forEach {
+                    DropdownMenuItem(
+                        text = { Text(it) },
+                        onClick = {
+                            season = it
+                            seasonExpanded = false
+                        }
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedTextField(
-            value = comfort,
-            onValueChange = { comfort = it },
-            label = { Text("Comfort Level (1-5)") },
-            modifier = Modifier.fillMaxWidth()
+        Text("Comfort Level: ${comfortLevel.toInt()}")
+        Slider(
+            value = comfortLevel,
+            onValueChange = { comfortLevel = it },
+            valueRange = 1f..5f,
+            steps = 3
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -146,7 +197,7 @@ fun EditItemScreen(
                     category = category,
                     color = color,
                     season = season,
-                    comfortLevel = comfort.toIntOrNull() ?: item.comfortLevel,
+                    comfortLevel = comfortLevel.toInt(),
                     fit = fit
                 )
 

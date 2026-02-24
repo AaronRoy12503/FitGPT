@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.fitgpt.app.data.model.ClothingCategory
+import com.fitgpt.app.data.model.ClothingColor
 import com.fitgpt.app.data.model.ClothingItem
 import com.fitgpt.app.viewmodel.WardrobeViewModel
 
@@ -20,6 +21,7 @@ fun AddItemScreen(
     var category by remember { mutableStateOf("") }
     var categoryExpanded by remember { mutableStateOf(false) }
     var color by remember { mutableStateOf("") }
+    var colorExpanded by remember { mutableStateOf(false) }
 
     var season by remember { mutableStateOf("All") }
     var seasonExpanded by remember { mutableStateOf(false) }
@@ -76,12 +78,35 @@ fun AddItemScreen(
                 }
             }
 
-            OutlinedTextField(
-                value = color,
-                onValueChange = { color = it },
-                label = { Text("Color") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            ExposedDropdownMenuBox(
+                expanded = colorExpanded,
+                onExpandedChange = { colorExpanded = !colorExpanded }
+            ) {
+                OutlinedTextField(
+                    value = color,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Color") },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
+
+                ExposedDropdownMenu(
+                    expanded = colorExpanded,
+                    onDismissRequest = { colorExpanded = false }
+                ) {
+                    ClothingColor.ALL.forEach {
+                        DropdownMenuItem(
+                            text = { Text(it) },
+                            onClick = {
+                                color = it
+                                colorExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
             ExposedDropdownMenuBox(
                 expanded = seasonExpanded,
