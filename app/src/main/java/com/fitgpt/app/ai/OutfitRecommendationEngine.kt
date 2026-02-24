@@ -1,5 +1,6 @@
 package com.fitgpt.app.ai
 
+import com.fitgpt.app.data.model.ClothingCategory
 import com.fitgpt.app.data.model.ClothingItem
 import com.fitgpt.app.data.model.OutfitRecommendation
 import com.fitgpt.app.data.model.UserPreferences
@@ -13,11 +14,11 @@ class OutfitRecommendationEngine {
     ): List<OutfitRecommendation> {
         if (items.isEmpty()) return emptyList()
 
-        val tops = items.filter { it.category.equals("Top", ignoreCase = true) }
-        val bottoms = items.filter { it.category.equals("Bottom", ignoreCase = true) }
-        val outerwear = items.filter { it.category.equals("Outerwear", ignoreCase = true) }
-        val shoes = items.filter { it.category.equals("Shoes", ignoreCase = true) }
-        val accessories = items.filter { it.category.equals("Accessory", ignoreCase = true) }
+        val tops = items.filter { it.category.equals(ClothingCategory.TOP, ignoreCase = true) }
+        val bottoms = items.filter { it.category.equals(ClothingCategory.BOTTOM, ignoreCase = true) }
+        val outerwear = items.filter { it.category.equals(ClothingCategory.OUTERWEAR, ignoreCase = true) }
+        val shoes = items.filter { it.category.equals(ClothingCategory.SHOES, ignoreCase = true) }
+        val accessories = items.filter { it.category.equals(ClothingCategory.ACCESSORY, ignoreCase = true) }
 
         val allCombinations = buildOutfitCombinations(tops, bottoms, outerwear, shoes, accessories)
             .distinctBy { combo -> combo.map { it.id }.sorted() }
@@ -154,10 +155,10 @@ class OutfitRecommendationEngine {
 
     internal fun styleMatchScore(item: ClothingItem, preferences: UserPreferences): Double {
         val styleCategoryMap = mapOf(
-            "Casual" to setOf("Top", "Bottom", "Shoes", "Accessory"),
-            "Formal" to setOf("Top", "Bottom", "Outerwear", "Shoes"),
-            "Sporty" to setOf("Top", "Bottom", "Shoes"),
-            "Streetwear" to setOf("Top", "Bottom", "Outerwear", "Shoes", "Accessory")
+            "Casual" to setOf(ClothingCategory.TOP, ClothingCategory.BOTTOM, ClothingCategory.SHOES, ClothingCategory.ACCESSORY),
+            "Formal" to setOf(ClothingCategory.TOP, ClothingCategory.BOTTOM, ClothingCategory.OUTERWEAR, ClothingCategory.SHOES),
+            "Sporty" to setOf(ClothingCategory.TOP, ClothingCategory.BOTTOM, ClothingCategory.SHOES),
+            "Streetwear" to setOf(ClothingCategory.TOP, ClothingCategory.BOTTOM, ClothingCategory.OUTERWEAR, ClothingCategory.SHOES, ClothingCategory.ACCESSORY)
         )
 
         val categories = styleCategoryMap[preferences.stylePreference]
@@ -177,23 +178,23 @@ class OutfitRecommendationEngine {
         // Base score from body type + category
         val baseScore = when (preferences.bodyType.lowercase()) {
             "slim" -> when (category) {
-                "outerwear" -> 0.9   // layering adds visual dimension
-                "accessory" -> 0.85  // draws the eye, adds interest
+                ClothingCategory.OUTERWEAR.lowercase() -> 0.9   // layering adds visual dimension
+                ClothingCategory.ACCESSORY.lowercase() -> 0.85  // draws the eye, adds interest
                 else -> 0.7
             }
             "athletic" -> when (category) {
-                "top" -> 0.9         // accommodates broader shoulders
-                "shoes" -> 0.85      // sporty footwear complements build
-                "bottom" -> 0.8
+                ClothingCategory.TOP.lowercase() -> 0.9         // accommodates broader shoulders
+                ClothingCategory.SHOES.lowercase() -> 0.85      // sporty footwear complements build
+                ClothingCategory.BOTTOM.lowercase() -> 0.8
                 else -> 0.7
             }
             "plus-size" -> {
                 val comfortBoost = if (item.comfortLevel >= 4) 0.1 else 0.0
                 val base = when (category) {
-                    "outerwear" -> 0.9
-                    "accessory" -> 0.85
-                    "top" -> 0.8
-                    "bottom" -> 0.75
+                    ClothingCategory.OUTERWEAR.lowercase() -> 0.9
+                    ClothingCategory.ACCESSORY.lowercase() -> 0.85
+                    ClothingCategory.TOP.lowercase() -> 0.8
+                    ClothingCategory.BOTTOM.lowercase() -> 0.75
                     else -> 0.7
                 }
                 (base + comfortBoost).coerceAtMost(1.0)
@@ -350,8 +351,8 @@ class OutfitRecommendationEngine {
 
     internal fun categoryDiversityBonus(outfit: List<ClothingItem>): Double {
         val categories = outfit.map { it.category.lowercase() }.toSet()
-        val hasTop = "top" in categories
-        val hasBottom = "bottom" in categories
+        val hasTop = ClothingCategory.TOP.lowercase() in categories
+        val hasBottom = ClothingCategory.BOTTOM.lowercase() in categories
 
         return when {
             hasTop && hasBottom && categories.size >= 3 -> 1.0
@@ -422,11 +423,11 @@ class OutfitRecommendationEngine {
 
         // Add body type insight only when the outfit has a notable fit advantage
         val fitInsight = when (preferences.bodyType.lowercase()) {
-            "slim" -> if (outfit.any { it.category.equals("Outerwear", ignoreCase = true) })
+            "slim" -> if (outfit.any { it.category.equals(ClothingCategory.OUTERWEAR, ignoreCase = true) })
                 "Layered pieces add depth to a slim frame" else null
-            "athletic" -> if (outfit.any { it.category.equals("Top", ignoreCase = true) })
+            "athletic" -> if (outfit.any { it.category.equals(ClothingCategory.TOP, ignoreCase = true) })
                 "Structured tops complement your athletic build" else null
-            "plus-size" -> if (outfit.any { it.category.equals("Outerwear", ignoreCase = true) })
+            "plus-size" -> if (outfit.any { it.category.equals(ClothingCategory.OUTERWEAR, ignoreCase = true) })
                 "Structured layers create a flattering silhouette"
             else if (outfit.any { it.comfortLevel >= 4 })
                 "Comfortable fits flatter your proportions" else null
@@ -464,7 +465,7 @@ class OutfitRecommendationEngine {
     private fun styleNote(item: ClothingItem, preferences: UserPreferences): String? {
         return when (preferences.stylePreference.lowercase()) {
             "casual" -> if (item.comfortLevel >= 4) "great casual pick for everyday wear" else null
-            "formal" -> if (item.category.equals("Outerwear", ignoreCase = true)) "adds a formal finishing touch" else null
+            "formal" -> if (item.category.equals(ClothingCategory.OUTERWEAR, ignoreCase = true)) "adds a formal finishing touch" else null
             "sporty" -> if (item.comfortLevel >= 4) "comfort-first choice for an active lifestyle" else null
             "streetwear" -> "works well in a streetwear rotation"
             else -> null
@@ -500,18 +501,18 @@ class OutfitRecommendationEngine {
         // Fall back to category-based notes
         return when (bodyType) {
             "slim" -> when (category) {
-                "outerwear" -> "layering adds dimension to a slim frame"
-                "accessory" -> "accessories add visual interest to your silhouette"
+                ClothingCategory.OUTERWEAR.lowercase() -> "layering adds dimension to a slim frame"
+                ClothingCategory.ACCESSORY.lowercase() -> "accessories add visual interest to your silhouette"
                 else -> null
             }
             "athletic" -> when (category) {
-                "top" -> "structured top complements an athletic build"
-                "shoes" -> "sporty footwear pairs well with your build"
+                ClothingCategory.TOP.lowercase() -> "structured top complements an athletic build"
+                ClothingCategory.SHOES.lowercase() -> "sporty footwear pairs well with your build"
                 else -> null
             }
             "plus-size" -> when {
-                category == "outerwear" -> "structured outerwear creates a flattering shape"
-                category == "accessory" -> "accessories draw the eye and accent your look"
+                category == ClothingCategory.OUTERWEAR.lowercase() -> "structured outerwear creates a flattering shape"
+                category == ClothingCategory.ACCESSORY.lowercase() -> "accessories draw the eye and accent your look"
                 item.comfortLevel >= 4 -> "comfortable fit flatters your proportions"
                 else -> null
             }

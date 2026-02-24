@@ -1,6 +1,7 @@
 package com.fitgpt.app.ai
 
 import com.fitgpt.app.BuildConfig
+import com.fitgpt.app.data.model.ClothingCategory
 import com.fitgpt.app.data.model.ClothingItem
 import com.fitgpt.app.data.model.OutfitRecommendation
 import com.fitgpt.app.data.model.UserPreferences
@@ -116,6 +117,8 @@ USER PREFERENCES:
 - Style: ${preferences.stylePreference}
 - Comfort preference: ${preferences.comfortPreference}/5
 - Preferred seasons: ${preferences.preferredSeasons.joinToString(", ")}
+
+VALID CATEGORIES: ${ClothingCategory.ALL.joinToString(", ")}
 
 WARDROBE (ID | Category | Color | Season | Comfort | Fit):
 $itemLines

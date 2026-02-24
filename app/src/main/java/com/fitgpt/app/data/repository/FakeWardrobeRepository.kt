@@ -7,7 +7,10 @@ class FakeWardrobeRepository : WardrobeRepository {
 
     private val wardrobeItems = mutableListOf(
         ClothingItem(1, "Top", "Black", "Winter", 3, "Fitted"),
-        ClothingItem(2, "Bottom", "Blue", "All", 4, "Regular")
+        ClothingItem(2, "Bottom", "Blue", "All", 4, "Regular"),
+        ClothingItem(3, "Shoes", "White", "All", 4, "Regular"),
+        ClothingItem(4, "Outerwear", "Navy", "Winter", 3, "Regular"),
+        ClothingItem(5, "Accessory", "Brown", "All", 5, "Regular")
     )
 
     private val savedOutfits = mutableListOf<SavedOutfit>()
