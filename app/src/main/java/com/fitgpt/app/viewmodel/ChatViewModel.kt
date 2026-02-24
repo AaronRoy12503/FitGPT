@@ -12,6 +12,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+/**
+ * DATA SAFETY: This ViewModel sends data to the Groq chat AI service.
+ *
+ * What flows to the external AI API (via [GroqChatService]):
+ * - User chat message text (role + content only; no IDs or timestamps)
+ * - Sanitized wardrobe context: clothing attributes only (category, color, season,
+ *   comfort level, fit). Item IDs, image URLs, and user-identifying metadata are
+ *   stripped before building the context string.
+ * - Style preferences (style preference, comfort preference, preferred seasons).
+ *   Body type is excluded as it is a physical identifier.
+ *
+ * What is NOT sent to the AI:
+ * - User IDs, auth tokens, or account information
+ * - Message IDs or timestamps
+ * - ClothingItem.id or ClothingItem.imageUrl
+ * - UserPreferences.bodyType
+ */
+
 class ChatViewModel : ViewModel() {
 
     private val groqChatService = GroqChatService()
@@ -55,6 +73,8 @@ class ChatViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val wardrobeContext = buildWardrobeContext()
+                // DATA SAFETY: GroqChatService.chat() only extracts role and content
+                // from ChatMessage objects; id and timestamp are never serialized.
                 val conversationHistory = _messages.value.filter { !it.isError }
                 val response = groqChatService.chat(conversationHistory, wardrobeContext)
 
@@ -65,11 +85,13 @@ class ChatViewModel : ViewModel() {
                     timestamp = System.currentTimeMillis()
                 )
             } catch (e: Exception) {
-                Log.e("ChatViewModel", "Chat failed", e)
+                // DATA SAFETY: Log only the exception class/message, not the full
+                // stack trace, to avoid leaking user data in logs.
+                Log.e("ChatViewModel", "Chat failed: ${e.javaClass.simpleName}")
                 _messages.value = _messages.value + ChatMessage(
                     id = UUID.randomUUID().toString(),
                     role = "assistant",
-                    content = "Something went wrong: ${e.message}",
+                    content = "Something went wrong. Please try again.",
                     timestamp = System.currentTimeMillis(),
                     isError = true
                 )
@@ -99,6 +121,15 @@ class ChatViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Builds a sanitized wardrobe context string for the AI.
+     *
+     * DATA SAFETY: Only clothing attributes are included (category, color, season,
+     * comfort level, fit). Fields that could identify the user are stripped:
+     * - ClothingItem.id (database identifier)
+     * - ClothingItem.imageUrl (could contain user-specific storage paths)
+     * - UserPreferences.bodyType (physical identifier)
+     */
     private fun buildWardrobeContext(): String {
         val prefs = userPreferences
         val items = wardrobeItems
@@ -111,7 +142,8 @@ class ChatViewModel : ViewModel() {
         if (items.isNotEmpty()) {
             sb.appendLine("The user's wardrobe contains the following items:")
             for (item in items) {
-                sb.appendLine("- ${item.category}: ${item.color}, ${item.season} season, comfort ${item.comfortLevel}/5")
+                // Only include safe clothing attributes; id and imageUrl are excluded.
+                sb.appendLine("- ${item.category}: ${item.color}, ${item.season} season, comfort ${item.comfortLevel}/5, fit ${item.fit}")
             }
         } else {
             sb.appendLine("The user hasn't added any wardrobe items yet.")
@@ -119,8 +151,8 @@ class ChatViewModel : ViewModel() {
 
         if (prefs != null) {
             sb.appendLine()
-            sb.appendLine("User preferences:")
-            sb.appendLine("- Body type: ${prefs.bodyType}")
+            // bodyType is excluded as it is a physical identifier.
+            sb.appendLine("Style preferences:")
             sb.appendLine("- Style preference: ${prefs.stylePreference}")
             sb.appendLine("- Comfort preference: ${prefs.comfortPreference}/5")
             sb.appendLine("- Preferred seasons: ${prefs.preferredSeasons.joinToString(", ")}")

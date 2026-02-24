@@ -12,6 +12,20 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+/**
+ * DATA SAFETY: This service sends data to the external Groq API.
+ *
+ * What is sent in each request:
+ * - System prompt containing a pre-sanitized wardrobe context string
+ *   (clothing attributes only: category, color, season, comfort, fit).
+ * - Conversation messages: only the role ("user"/"assistant") and text content
+ *   are serialized. ChatMessage.id and ChatMessage.timestamp are never included
+ *   in the API payload.
+ *
+ * The wardrobeContext string is sanitized by [ChatViewModel.buildWardrobeContext]
+ * before reaching this service. No user IDs, image URLs, body type, or other
+ * identifying metadata are included.
+ */
 class GroqChatService {
 
     private val apiKey: String = BuildConfig.GROQ_API_KEY
@@ -40,6 +54,8 @@ class GroqChatService {
                 put("role", "system")
                 put("content", buildSystemPrompt(wardrobeContext))
             })
+            // DATA SAFETY: Only role and content are serialized.
+            // ChatMessage.id, .timestamp, and .isError are intentionally excluded.
             for (msg in messages) {
                 put(JSONObject().apply {
                     put("role", msg.role)

@@ -14,8 +14,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+// DATA SAFETY: This service sends only non-identifying clothing attributes
+// (category, color, season, comfortLevel, fit) and general style preferences
+// (bodyType, stylePreference, comfortPreference, preferredSeasons) to the Groq API.
+// Real item IDs are replaced with anonymous indices before sending and mapped back
+// on response. No user IDs, names, emails, device info, or timestamps are transmitted.
 class GroqRecommendationService {
 
+    // API key sourced from BuildConfig (injected at build time, not hardcoded)
     private val apiKey: String = BuildConfig.GROQ_API_KEY
 
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -39,9 +45,11 @@ class GroqRecommendationService {
     ): List<OutfitRecommendation> {
         if (!isAvailable || items.isEmpty()) return emptyList()
 
-        val prompt = buildPrompt(items, preferences)
+        // Map real item IDs to anonymous indices so no database IDs leave the device
+        val indexToItem = items.mapIndexed { index, item -> index to item }.toMap()
+        val prompt = buildPrompt(indexToItem, preferences)
         val text = callApi(prompt) ?: return emptyList()
-        return parseResponse(text, items)
+        return parseResponse(text, indexToItem)
     }
 
     suspend fun generateItemExplanation(
@@ -92,11 +100,12 @@ class GroqRecommendationService {
     }
 
     private fun buildPrompt(
-        items: List<ClothingItem>,
+        indexToItem: Map<Int, ClothingItem>,
         preferences: UserPreferences
     ): String {
-        val itemLines = items.joinToString("\n") { item ->
-            "${item.id} | ${item.category} | ${item.color} | ${item.season} | ${item.comfortLevel} | ${item.fit}"
+        // Only send non-identifying attributes; use anonymous indices instead of real IDs
+        val itemLines = indexToItem.entries.joinToString("\n") { (index, item) ->
+            "$index | ${item.category} | ${item.color} | ${item.season} | ${item.comfortLevel} | ${item.fit}"
         }
 
         return """
@@ -111,7 +120,7 @@ USER PREFERENCES:
 WARDROBE (ID | Category | Color | Season | Comfort | Fit):
 $itemLines
 
-The ONLY valid item IDs are: ${items.joinToString(", ") { it.id.toString() }}
+The ONLY valid item IDs are: ${indexToItem.keys.joinToString(", ")}
 Do NOT invent or use any IDs not listed above.
 
 For each outfit, respond in EXACTLY this format (separate outfits with a blank line):
@@ -165,9 +174,10 @@ Respond with ONLY the explanation, no labels or prefixes.
 
     private fun parseResponse(
         text: String,
-        items: List<ClothingItem>
+        indexToItem: Map<Int, ClothingItem>
     ): List<OutfitRecommendation> {
-        val itemMap = items.associateBy { it.id }
+        // indexToItem maps anonymous prompt indices back to real ClothingItem objects
+        val itemMap = indexToItem
         val blocks = text.split("\n\n").filter { it.isNotBlank() }
         val results = mutableListOf<OutfitRecommendation>()
 
@@ -211,7 +221,11 @@ Respond with ONLY the explanation, no labels or prefixes.
                     ?.trim()
                     ?: "AI-recommended outfit combination."
 
-                val itemExplanations = parseItemDetails(itemDetailsLine, itemMap)
+                // Parse explanations keyed by anonymous index, then remap to real item IDs
+                val indexedExplanations = parseItemDetails(itemDetailsLine, itemMap)
+                val itemExplanations = indexedExplanations.mapNotNull { (index, reason) ->
+                    itemMap[index]?.let { it.id to reason }
+                }.toMap()
 
                 results.add(
                     OutfitRecommendation(
