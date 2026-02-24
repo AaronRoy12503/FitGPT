@@ -62,7 +62,10 @@ fun WardrobeScreen(
         ) {
 
             Button(
-                onClick = { navController.navigate(Routes.RECOMMENDATIONS) },
+                onClick = {
+                    viewModel.refreshRecommendations()
+                    navController.navigate(Routes.RECOMMENDATIONS)
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(

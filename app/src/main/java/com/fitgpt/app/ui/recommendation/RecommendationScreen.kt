@@ -33,6 +33,12 @@ fun RecommendationScreen(
     viewModel: WardrobeViewModel = viewModel()
 ) {
     val uiState by viewModel.recommendationState.collectAsState()
+    val wardrobeItems by viewModel.wardrobeItems.collectAsState()
+
+    // Re-generate recommendations whenever the wardrobe changes (e.g. item deleted)
+    LaunchedEffect(wardrobeItems) {
+        viewModel.refreshRecommendations()
+    }
 
     Scaffold(
         topBar = {

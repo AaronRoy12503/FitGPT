@@ -12,6 +12,7 @@ import com.fitgpt.app.data.model.UserPreferences
 import com.fitgpt.app.data.PreferencesManager
 import com.fitgpt.app.data.repository.FakeWardrobeRepository
 import com.fitgpt.app.data.repository.WardrobeRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -53,6 +54,9 @@ class WardrobeViewModel : ViewModel() {
     // Recently shown outfit history — each entry is a set of item IDs
     private val recentOutfitHistory = ArrayDeque<Set<Int>>()
 
+    // Track in-flight Groq job so we can cancel it on wardrobe mutations
+    private var groqJob: Job? = null
+
     // UI state for RecommendationScreen
     private val _recommendationState = MutableStateFlow<RecommendationUiState>(
         RecommendationUiState.Loading
@@ -72,6 +76,7 @@ class WardrobeViewModel : ViewModel() {
 
     fun deleteItem(item: ClothingItem) {
         repository.deleteItem(item)
+        purgeDeletedItemFromHistory(item.id)
         refresh()
     }
 
@@ -135,6 +140,10 @@ class WardrobeViewModel : ViewModel() {
     }
 
     fun refreshRecommendations() {
+        // Cancel any in-flight Groq request so stale results can't overwrite fresh data
+        groqJob?.cancel()
+        groqJob = null
+
         val historySnapshot = recentOutfitHistory.toSet()
 
         // Step 1: Always run rule-based engine synchronously as fallback
@@ -146,25 +155,34 @@ class WardrobeViewModel : ViewModel() {
         _recommendations.value = fallback
         recordShownOutfits(fallback)
 
-        // Step 2: If Gemini is available, attempt AI recommendations
+        // Step 2: If Groq is available, attempt AI recommendations
         if (groqService.isAvailable) {
             _recommendationState.value = RecommendationUiState.Loading
 
-            viewModelScope.launch {
+            groqJob = viewModelScope.launch {
                 try {
                     val aiResults = groqService.recommend(
                         items = allItems.value,
                         preferences = _userPreferences.value
                     )
-                    if (aiResults.isNotEmpty()) {
-                        _recommendations.value = aiResults
-                        recordShownOutfits(aiResults)
+                    // Filter out any items that were deleted while the API call was in-flight
+                    val currentItemIds = allItems.value.map { it.id }.toSet()
+                    val cleanResults = aiResults.map { rec ->
+                        rec.copy(
+                            items = rec.items.filter { it.id in currentItemIds },
+                            itemExplanations = rec.itemExplanations.filterKeys { it in currentItemIds }
+                        )
+                    }.filter { it.items.isNotEmpty() }
+
+                    if (cleanResults.isNotEmpty()) {
+                        _recommendations.value = cleanResults
+                        recordShownOutfits(cleanResults)
                         _recommendationState.value = RecommendationUiState.Success(
-                            recommendations = aiResults,
+                            recommendations = cleanResults,
                             isAiGenerated = true
                         )
                     } else {
-                        // AI returned empty, use fallback
+                        // AI returned empty or all items were deleted, use fallback
                         _recommendationState.value = RecommendationUiState.Success(
                             recommendations = fallback,
                             isAiGenerated = false
@@ -200,6 +218,14 @@ class WardrobeViewModel : ViewModel() {
     }
 
     /* ---------- INTERNAL ---------- */
+
+    private fun purgeDeletedItemFromHistory(deletedId: Int) {
+        val cleaned = recentOutfitHistory.map { idSet ->
+            idSet - deletedId
+        }.filter { it.isNotEmpty() }
+        recentOutfitHistory.clear()
+        cleaned.forEach { recentOutfitHistory.addLast(it) }
+    }
 
     private fun refresh() {
         allItems.value = repository.getWardrobeItems()
