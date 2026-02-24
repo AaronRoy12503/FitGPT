@@ -165,12 +165,12 @@ class WardrobeViewModel : ViewModel() {
                         items = allItems.value,
                         preferences = _userPreferences.value
                     )
-                    // Filter out any items that were deleted while the API call was in-flight
-                    val currentItemIds = allItems.value.map { it.id }.toSet()
+                    // Replace stale item snapshots with current data and drop deleted items
+                    val currentItemsById = allItems.value.associateBy { it.id }
                     val cleanResults = aiResults.map { rec ->
                         rec.copy(
-                            items = rec.items.filter { it.id in currentItemIds },
-                            itemExplanations = rec.itemExplanations.filterKeys { it in currentItemIds }
+                            items = rec.items.mapNotNull { currentItemsById[it.id] },
+                            itemExplanations = rec.itemExplanations.filterKeys { it in currentItemsById }
                         )
                     }.filter { it.items.isNotEmpty() }
 
