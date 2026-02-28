@@ -152,8 +152,9 @@ class WardrobeViewModel : ViewModel() {
             preferences = _userPreferences.value,
             recentlyShown = historySnapshot
         )
-        _recommendations.value = fallback
+        // Record shown outfits immediately so next refresh won't repeat them
         recordShownOutfits(fallback)
+        _recommendations.value = fallback
 
         // Step 2: If Groq is available, attempt AI recommendations
         if (groqService.isAvailable) {
@@ -174,11 +175,17 @@ class WardrobeViewModel : ViewModel() {
                         )
                     }.filter { it.items.isNotEmpty() }
 
-                    if (cleanResults.isNotEmpty()) {
-                        _recommendations.value = cleanResults
-                        recordShownOutfits(cleanResults)
+                    // Filter out AI results that duplicate recently shown outfits
+                    val updatedHistory = recentOutfitHistory.toSet()
+                    val freshAiResults = cleanResults.filter { rec ->
+                        rec.items.map { it.id }.toSet() !in updatedHistory
+                    }.ifEmpty { cleanResults }
+
+                    if (freshAiResults.isNotEmpty()) {
+                        recordShownOutfits(freshAiResults)
+                        _recommendations.value = freshAiResults
                         _recommendationState.value = RecommendationUiState.Success(
-                            recommendations = cleanResults,
+                            recommendations = freshAiResults,
                             isAiGenerated = true
                         )
                     } else {

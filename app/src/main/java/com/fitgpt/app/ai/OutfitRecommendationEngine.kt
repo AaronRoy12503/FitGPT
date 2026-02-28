@@ -44,10 +44,10 @@ class OutfitRecommendationEngine {
             combo.map { it.id }.toSet() !in recentlyShown
         }
 
-        // If every combination was recently shown, ignore history to avoid empty results
+        // If every combination was recently shown, clear history and use all
         val outfitCombinations = fresh.ifEmpty { allCombinations }
 
-        return outfitCombinations
+        val scored = outfitCombinations
             .map { outfit ->
                 val score = scoreOutfit(outfit, preferences)
                 val perItem = outfit.associate { item ->
@@ -60,8 +60,43 @@ class OutfitRecommendationEngine {
                     itemExplanations = perItem
                 )
             }
-            .sortedByDescending { it.score }
-            .take(MAX_RECOMMENDATIONS)
+
+        // Add controlled randomness: pick from a wider pool so each refresh feels different.
+        // Take more candidates than needed, then shuffle within score tiers to vary the results.
+        return pickDiverseResults(scored, MAX_RECOMMENDATIONS)
+    }
+
+    /**
+     * Selects [count] recommendations that balance quality (score) with variety.
+     * Groups candidates into score tiers and shuffles within each tier so that
+     * equally-good outfits rotate across refreshes instead of always returning
+     * the same deterministic top-N.
+     */
+    private fun pickDiverseResults(
+        candidates: List<OutfitRecommendation>,
+        count: Int
+    ): List<OutfitRecommendation> {
+        if (candidates.size <= count) return candidates.sortedByDescending { it.score }
+
+        // Sort descending by score, then partition into tiers (buckets of ~0.15 score width)
+        val sorted = candidates.sortedByDescending { it.score }
+        val tierWidth = 0.15
+        val tiers = mutableListOf<MutableList<OutfitRecommendation>>()
+
+        for (rec in sorted) {
+            val lastTier = tiers.lastOrNull()
+            if (lastTier == null || (lastTier.first().score - rec.score) > tierWidth) {
+                tiers.add(mutableListOf(rec))
+            } else {
+                lastTier.add(rec)
+            }
+        }
+
+        // Shuffle within each tier so equally-scored outfits rotate
+        tiers.forEach { it.shuffle() }
+
+        // Flatten and take the top N
+        return tiers.flatten().take(count)
     }
 
     fun generateItemExplanation(item: ClothingItem, preferences: UserPreferences): String {
@@ -540,7 +575,7 @@ class OutfitRecommendationEngine {
 
     companion object {
         private const val MAX_RECOMMENDATIONS = 5
-        const val MAX_HISTORY_SIZE = 10
+        const val MAX_HISTORY_SIZE = 50
 
         // Scoring weights — color harmony is prioritized for a polished look
         internal const val WEIGHT_SEASON = 0.25
