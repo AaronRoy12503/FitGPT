@@ -1,6 +1,7 @@
 package com.fitgpt.app.data.repository
 
 import com.fitgpt.app.data.model.ClothingItem
+import com.fitgpt.app.data.model.PlannedOutfit
 import com.fitgpt.app.data.model.SavedOutfit
 
 class FakeWardrobeRepository : WardrobeRepository {
@@ -14,6 +15,7 @@ class FakeWardrobeRepository : WardrobeRepository {
     )
 
     private val savedOutfits = mutableListOf<SavedOutfit>()
+    private val plannedOutfits = mutableListOf<PlannedOutfit>()
 
     override fun getWardrobeItems(): List<ClothingItem> = wardrobeItems
 
@@ -37,4 +39,14 @@ class FakeWardrobeRepository : WardrobeRepository {
     }
 
     override fun getSavedOutfits(): List<SavedOutfit> = savedOutfits
+
+    override fun planOutfit(outfit: PlannedOutfit) {
+        plannedOutfits.add(outfit)
+    }
+
+    override fun getPlannedOutfits(): List<PlannedOutfit> = plannedOutfits
+
+    override fun removePlannedOutfit(outfitId: Int) {
+        plannedOutfits.removeAll { it.id == outfitId }
+    }
 }

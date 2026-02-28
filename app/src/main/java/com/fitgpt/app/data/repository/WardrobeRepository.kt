@@ -1,6 +1,7 @@
 package com.fitgpt.app.data.repository
 
 import com.fitgpt.app.data.model.ClothingItem
+import com.fitgpt.app.data.model.PlannedOutfit
 import com.fitgpt.app.data.model.SavedOutfit
 
 interface WardrobeRepository {
@@ -13,4 +14,9 @@ interface WardrobeRepository {
     // Saved outfits
     fun saveOutfit(outfit: SavedOutfit)
     fun getSavedOutfits(): List<SavedOutfit>
+
+    // Planned outfits
+    fun planOutfit(outfit: PlannedOutfit)
+    fun getPlannedOutfits(): List<PlannedOutfit>
+    fun removePlannedOutfit(outfitId: Int)
 }

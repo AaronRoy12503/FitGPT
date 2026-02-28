@@ -10,7 +10,8 @@ class OutfitRecommendationEngine {
     fun recommend(
         items: List<ClothingItem>,
         preferences: UserPreferences,
-        recentlyShown: Set<Set<Int>> = emptySet()
+        recentlyShown: Set<Set<Int>> = emptySet(),
+        plannedItemIds: Set<Int> = emptySet()
     ): List<OutfitRecommendation> {
         if (items.isEmpty()) return emptyList()
 
@@ -51,8 +52,9 @@ class OutfitRecommendationEngine {
             .map { outfit ->
                 val baseScore = scoreOutfit(outfit, preferences)
                 // Penalize outfits that heavily overlap with recently shown ones
-                val penalty = overlapPenalty(outfit, recentlyShown)
-                val adjustedScore = (baseScore - penalty).coerceAtLeast(0.01)
+                val overlapPen = overlapPenalty(outfit, recentlyShown)
+                val plannerPen = plannerItemPenalty(outfit, plannedItemIds)
+                val adjustedScore = (baseScore - overlapPen - plannerPen).coerceAtLeast(0.01)
                 val perItem = outfit.associate { item ->
                     item.id to generateItemExplanation(item, preferences)
                 }
@@ -84,6 +86,23 @@ class OutfitRecommendationEngine {
         } ?: 0.0
         // Scale by diversity weight — a 100% overlap (not exact set match) gets full penalty
         return maxOverlap * WEIGHT_DIVERSITY
+    }
+
+    /**
+     * Penalizes outfits that contain items already planned for the day.
+     * The penalty is proportional to how many outfit items overlap with
+     * the planned set — wearing the same shirt you already committed to
+     * should be deprioritized but not excluded.
+     */
+    internal fun plannerItemPenalty(
+        outfit: List<ClothingItem>,
+        plannedItemIds: Set<Int>
+    ): Double {
+        if (plannedItemIds.isEmpty()) return 0.0
+        val outfitIds = outfit.map { it.id }.toSet()
+        val overlapCount = outfitIds.intersect(plannedItemIds).size
+        val overlapRatio = overlapCount.toDouble() / outfitIds.size.coerceAtLeast(1)
+        return overlapRatio * WEIGHT_PLANNER
     }
 
     /**
@@ -611,5 +630,6 @@ class OutfitRecommendationEngine {
         internal const val WEIGHT_HARMONY = 0.20
         internal const val WEIGHT_COVERAGE = 0.10
         internal const val WEIGHT_DIVERSITY = 0.15
+        internal const val WEIGHT_PLANNER = 0.25
     }
 }

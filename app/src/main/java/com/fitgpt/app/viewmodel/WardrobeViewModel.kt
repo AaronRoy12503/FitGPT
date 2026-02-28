@@ -7,8 +7,10 @@ import com.fitgpt.app.ai.GroqRecommendationService
 import com.fitgpt.app.ai.OutfitRecommendationEngine
 import com.fitgpt.app.data.model.ClothingItem
 import com.fitgpt.app.data.model.OutfitRecommendation
+import com.fitgpt.app.data.model.PlannedOutfit
 import com.fitgpt.app.data.model.SavedOutfit
 import com.fitgpt.app.data.model.UserPreferences
+import java.time.LocalDate
 import com.fitgpt.app.data.PreferencesManager
 import com.fitgpt.app.data.repository.FakeWardrobeRepository
 import com.fitgpt.app.data.repository.WardrobeRepository
@@ -17,7 +19,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class WardrobeViewModel : ViewModel() {
+class WardrobeViewModel(
+    private val todayProvider: () -> LocalDate = { LocalDate.now() }
+) : ViewModel() {
 
     private val repository: WardrobeRepository = FakeWardrobeRepository()
     private val recommendationEngine = OutfitRecommendationEngine()
@@ -63,6 +67,10 @@ class WardrobeViewModel : ViewModel() {
     )
     val recommendationState: StateFlow<RecommendationUiState> = _recommendationState
 
+    // Planned outfits — declared before init so todayPlannedItemIds() can access it
+    private val _plannedOutfits = MutableStateFlow<List<PlannedOutfit>>(emptyList())
+    val plannedOutfits: StateFlow<List<PlannedOutfit>> = _plannedOutfits
+
     init {
         refreshRecommendations()
     }
@@ -97,6 +105,32 @@ class WardrobeViewModel : ViewModel() {
 
     fun getSavedOutfits(): List<SavedOutfit> {
         return repository.getSavedOutfits()
+    }
+
+    /* ---------- PLANNED OUTFITS ---------- */
+
+    fun planOutfit(outfit: PlannedOutfit) {
+        repository.planOutfit(outfit)
+        _plannedOutfits.value = repository.getPlannedOutfits()
+        refreshRecommendations()
+    }
+
+    fun removePlannedOutfit(outfitId: Int) {
+        repository.removePlannedOutfit(outfitId)
+        _plannedOutfits.value = repository.getPlannedOutfits()
+        refreshRecommendations()
+    }
+
+    fun getPlannedOutfitsForDate(date: LocalDate): List<PlannedOutfit> {
+        return _plannedOutfits.value.filter { it.date == date }
+    }
+
+    private fun todayPlannedItemIds(): Set<Int> {
+        val today = todayProvider()
+        return _plannedOutfits.value
+            .filter { it.date == today }
+            .flatMap { outfit -> outfit.items.map { it.id } }
+            .toSet()
     }
 
     /* ---------- FILTERING ---------- */
@@ -145,12 +179,14 @@ class WardrobeViewModel : ViewModel() {
         groqJob = null
 
         val historySnapshot = recentOutfitHistory.toSet()
+        val plannedIds = todayPlannedItemIds()
 
         // Step 1: Always run rule-based engine synchronously as fallback
         val fallback = recommendationEngine.recommend(
             items = allItems.value,
             preferences = _userPreferences.value,
-            recentlyShown = historySnapshot
+            recentlyShown = historySnapshot,
+            plannedItemIds = plannedIds
         )
         // Record shown outfits immediately so next refresh won't repeat them
         recordShownOutfits(fallback)
