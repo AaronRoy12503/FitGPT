@@ -276,7 +276,7 @@ class WardrobeViewModel(
     private fun recordShownOutfits(recommendations: List<OutfitRecommendation>) {
         for (rec in recommendations) {
             val key = rec.items.map { it.id }.toSet()
-            if (key !in recentOutfitHistory) {
+            if (key.isNotEmpty() && key !in recentOutfitHistory) {
                 recentOutfitHistory.addLast(key)
             }
         }
