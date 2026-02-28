@@ -39,38 +39,58 @@ class OutfitRecommendationEngine {
                 .take(MAX_RECOMMENDATIONS)
         }
 
-        // Filter out recently shown outfits
+        // Filter out recently shown outfits (exact match)
         val fresh = allCombinations.filter { combo ->
             combo.map { it.id }.toSet() !in recentlyShown
         }
 
-        // If every combination was recently shown, clear history and use all
+        // If every combination was recently shown, use all (graceful reset)
         val outfitCombinations = fresh.ifEmpty { allCombinations }
 
         val scored = outfitCombinations
             .map { outfit ->
-                val score = scoreOutfit(outfit, preferences)
+                val baseScore = scoreOutfit(outfit, preferences)
+                // Penalize outfits that heavily overlap with recently shown ones
+                val penalty = overlapPenalty(outfit, recentlyShown)
+                val adjustedScore = (baseScore - penalty).coerceAtLeast(0.01)
                 val perItem = outfit.associate { item ->
                     item.id to generateItemExplanation(item, preferences)
                 }
                 OutfitRecommendation(
                     items = outfit,
-                    score = score,
-                    explanation = generateExplanation(outfit, score, preferences),
+                    score = adjustedScore,
+                    explanation = generateExplanation(outfit, adjustedScore, preferences),
                     itemExplanations = perItem
                 )
             }
 
-        // Add controlled randomness: pick from a wider pool so each refresh feels different.
-        // Take more candidates than needed, then shuffle within score tiers to vary the results.
         return pickDiverseResults(scored, MAX_RECOMMENDATIONS)
     }
 
     /**
-     * Selects [count] recommendations that balance quality (score) with variety.
-     * Groups candidates into score tiers and shuffles within each tier so that
-     * equally-good outfits rotate across refreshes instead of always returning
-     * the same deterministic top-N.
+     * Penalizes outfits that share many items with recently shown outfits.
+     * Exact duplicates are already filtered out; this handles *partial* overlap
+     * so that refreshes feel genuinely different, not just a small item swap.
+     */
+    internal fun overlapPenalty(
+        outfit: List<ClothingItem>,
+        recentlyShown: Set<Set<Int>>
+    ): Double {
+        if (recentlyShown.isEmpty()) return 0.0
+        val outfitIds = outfit.map { it.id }.toSet()
+        val maxOverlap = recentlyShown.maxOfOrNull { shown ->
+            val commonCount = outfitIds.intersect(shown).size
+            commonCount.toDouble() / outfitIds.size.coerceAtLeast(1)
+        } ?: 0.0
+        // Scale by diversity weight — a 100% overlap (not exact set match) gets full penalty
+        return maxOverlap * WEIGHT_DIVERSITY
+    }
+
+    /**
+     * Greedy selection that balances quality with item diversity.
+     * Picks the highest-scoring outfit first, then for each subsequent pick
+     * adds a novelty bonus for outfits that use items not yet selected.
+     * This ensures the returned set covers more of the wardrobe.
      */
     private fun pickDiverseResults(
         candidates: List<OutfitRecommendation>,
@@ -78,25 +98,25 @@ class OutfitRecommendationEngine {
     ): List<OutfitRecommendation> {
         if (candidates.size <= count) return candidates.sortedByDescending { it.score }
 
-        // Sort descending by score, then partition into tiers (buckets of ~0.15 score width)
-        val sorted = candidates.sortedByDescending { it.score }
-        val tierWidth = 0.15
-        val tiers = mutableListOf<MutableList<OutfitRecommendation>>()
+        val selected = mutableListOf<OutfitRecommendation>()
+        val remaining = candidates.toMutableList()
+        val usedItemIds = mutableSetOf<Int>()
 
-        for (rec in sorted) {
-            val lastTier = tiers.lastOrNull()
-            if (lastTier == null || (lastTier.first().score - rec.score) > tierWidth) {
-                tiers.add(mutableListOf(rec))
-            } else {
-                lastTier.add(rec)
-            }
+        while (selected.size < count && remaining.isNotEmpty()) {
+            val best = remaining.maxByOrNull { rec ->
+                val novelItems = rec.items.count { it.id !in usedItemIds }
+                val noveltyBonus = if (rec.items.isNotEmpty()) {
+                    novelItems.toDouble() / rec.items.size * WEIGHT_DIVERSITY
+                } else 0.0
+                rec.score + noveltyBonus
+            } ?: break
+
+            selected.add(best)
+            remaining.remove(best)
+            usedItemIds.addAll(best.items.map { it.id })
         }
 
-        // Shuffle within each tier so equally-scored outfits rotate
-        tiers.forEach { it.shuffle() }
-
-        // Flatten and take the top N
-        return tiers.flatten().take(count)
+        return selected
     }
 
     fun generateItemExplanation(item: ClothingItem, preferences: UserPreferences): String {
@@ -415,25 +435,30 @@ class OutfitRecommendationEngine {
                 // Base outfit: top + bottom
                 val base = listOf(top, bottom)
                 combos.add(base)
+                if (combos.size >= MAX_COMBINATIONS) return combos
 
                 // Top + bottom + outerwear
                 for (outer in outerwear) {
                     combos.add(base + outer)
+                    if (combos.size >= MAX_COMBINATIONS) return combos
                 }
 
                 // Top + bottom + shoes
                 for (shoe in shoes) {
                     combos.add(base + shoe)
+                    if (combos.size >= MAX_COMBINATIONS) return combos
 
                     // Top + bottom + shoes + outerwear
                     for (outer in outerwear) {
                         combos.add(base + shoe + outer)
+                        if (combos.size >= MAX_COMBINATIONS) return combos
                     }
                 }
 
                 // Top + bottom + accessory
                 for (acc in accessories) {
                     combos.add(base + acc)
+                    if (combos.size >= MAX_COMBINATIONS) return combos
                 }
             }
         }
@@ -576,6 +601,7 @@ class OutfitRecommendationEngine {
     companion object {
         private const val MAX_RECOMMENDATIONS = 5
         const val MAX_HISTORY_SIZE = 50
+        private const val MAX_COMBINATIONS = 500
 
         // Scoring weights — color harmony is prioritized for a polished look
         internal const val WEIGHT_SEASON = 0.25
@@ -584,5 +610,6 @@ class OutfitRecommendationEngine {
         internal const val WEIGHT_FIT = 0.10
         internal const val WEIGHT_HARMONY = 0.20
         internal const val WEIGHT_COVERAGE = 0.10
+        internal const val WEIGHT_DIVERSITY = 0.15
     }
 }
