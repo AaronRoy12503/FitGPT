@@ -60,8 +60,9 @@ class OutfitRecommendationEngine {
                 val plannerPen = plannerItemPenalty(outfit, plannedItemIds)
                 val timeBonus = timeContextScore(outfit, timeCategory) * WEIGHT_TIME
                 val tempComfortBonus = temperatureComfortBonus(outfit, temperatureCategory) * WEIGHT_TEMPERATURE
+                val freshnessBonus = freshnessScore(outfit, recentlyShown) * WEIGHT_FRESHNESS
                 val totalPenalty = (overlapPen + plannerPen).coerceAtMost(MAX_CONTEXT_PENALTY)
-                val adjustedScore = (baseScore + timeBonus + tempComfortBonus - totalPenalty).coerceAtLeast(0.01)
+                val adjustedScore = (baseScore + timeBonus + tempComfortBonus + freshnessBonus - totalPenalty).coerceAtLeast(0.01)
                 val perItem = outfit.associate { item ->
                     item.id to generateItemExplanation(item, preferences)
                 }
@@ -74,6 +75,48 @@ class OutfitRecommendationEngine {
             }
 
         return pickDiverseResults(scored, MAX_RECOMMENDATIONS)
+    }
+
+    // --- Freshness ---
+
+    /**
+     * Scores how fresh an outfit is relative to recently shown outfits.
+     *
+     * Returns a value in [0.0, 1.0]:
+     * - 1.0 when the outfit shares no items with any recent outfit
+     * - 0.0 when the outfit is an exact repeat of a recent outfit
+     * - Near-duplicates (overlap >= [NEAR_DUPLICATE_THRESHOLD]) are penalized
+     *   more heavily via amplification so that "swap one accessory" outfits
+     *   rank much lower than genuinely novel combinations.
+     *
+     * Multiplied by [WEIGHT_FRESHNESS] in the scoring formula for an additive
+     * bonus that complements the subtractive [overlapPenalty].
+     */
+    internal fun freshnessScore(
+        outfit: List<ClothingItem>,
+        recentlyShown: Set<Set<Int>>
+    ): Double {
+        if (recentlyShown.isEmpty() || outfit.isEmpty()) return 1.0
+
+        val outfitIds = outfit.map { it.id }.toSet()
+
+        // Exact repeat → minimum freshness
+        if (outfitIds in recentlyShown) return 0.0
+
+        // Find maximum overlap ratio with any recent outfit
+        val maxOverlap = recentlyShown.maxOfOrNull { shown ->
+            val commonCount = outfitIds.intersect(shown).size
+            commonCount.toDouble() / outfitIds.size.coerceAtLeast(1)
+        } ?: 0.0
+
+        // Near-duplicate amplification: [0.75, 1.0) → [0.875, 1.0)
+        val effectiveOverlap = if (maxOverlap >= NEAR_DUPLICATE_THRESHOLD) {
+            0.5 * (1.0 + maxOverlap)
+        } else {
+            maxOverlap
+        }
+
+        return (1.0 - effectiveOverlap).coerceIn(0.0, 1.0)
     }
 
     /**
@@ -768,6 +811,8 @@ class OutfitRecommendationEngine {
         internal const val WEIGHT_PLANNER = 0.25
         internal const val WEIGHT_TIME = 0.10
         internal const val WEIGHT_TEMPERATURE = 0.10
+        internal const val WEIGHT_FRESHNESS = 0.15
+        internal const val NEAR_DUPLICATE_THRESHOLD = 0.75
         internal const val TEMPERATURE_SUITABILITY_FLOOR = 0.05
         internal const val MAX_CONTEXT_PENALTY = 0.40
     }
