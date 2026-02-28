@@ -17,7 +17,7 @@ class FakeWardrobeRepository : WardrobeRepository {
     private val savedOutfits = mutableListOf<SavedOutfit>()
     private val plannedOutfits = mutableListOf<PlannedOutfit>()
 
-    override fun getWardrobeItems(): List<ClothingItem> = wardrobeItems
+    override fun getWardrobeItems(): List<ClothingItem> = wardrobeItems.filter { !it.isArchived }
 
     override fun addItem(item: ClothingItem) {
         wardrobeItems.add(item)
@@ -33,6 +33,22 @@ class FakeWardrobeRepository : WardrobeRepository {
             wardrobeItems[index] = item
         }
     }
+
+    override fun archiveItem(item: ClothingItem) {
+        val index = wardrobeItems.indexOfFirst { it.id == item.id }
+        if (index != -1) {
+            wardrobeItems[index] = wardrobeItems[index].copy(isArchived = true)
+        }
+    }
+
+    override fun unarchiveItem(item: ClothingItem) {
+        val index = wardrobeItems.indexOfFirst { it.id == item.id }
+        if (index != -1) {
+            wardrobeItems[index] = wardrobeItems[index].copy(isArchived = false)
+        }
+    }
+
+    override fun getArchivedItems(): List<ClothingItem> = wardrobeItems.filter { it.isArchived }
 
     override fun saveOutfit(outfit: SavedOutfit) {
         savedOutfits.add(outfit)

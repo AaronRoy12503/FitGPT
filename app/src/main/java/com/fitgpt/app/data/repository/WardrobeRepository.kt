@@ -10,6 +10,9 @@ interface WardrobeRepository {
     fun addItem(item: ClothingItem)
     fun deleteItem(item: ClothingItem)
     fun updateItem(item: ClothingItem)
+    fun archiveItem(item: ClothingItem)
+    fun unarchiveItem(item: ClothingItem)
+    fun getArchivedItems(): List<ClothingItem>
 
     // Saved outfits
     fun saveOutfit(outfit: SavedOutfit)

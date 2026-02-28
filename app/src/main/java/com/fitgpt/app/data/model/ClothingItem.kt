@@ -7,5 +7,6 @@ data class ClothingItem(
     val season: String,
     val comfortLevel: Int,
     val fit: String = "Regular",
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    val isArchived: Boolean = false
 )

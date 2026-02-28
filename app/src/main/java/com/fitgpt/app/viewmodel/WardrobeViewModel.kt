@@ -28,8 +28,8 @@ class WardrobeViewModel(
     private val groqService = GroqRecommendationService()
     private var preferencesManager: PreferencesManager? = null
 
-    // Full source of truth
-    private val allItems = MutableStateFlow(repository.getWardrobeItems())
+    // Full source of truth (active + archived)
+    private val allItems = MutableStateFlow(repository.getWardrobeItems() + repository.getArchivedItems())
 
     // Filters
     private val selectedSeason = MutableStateFlow<String?>(null)
@@ -67,6 +67,10 @@ class WardrobeViewModel(
     )
     val recommendationState: StateFlow<RecommendationUiState> = _recommendationState
 
+    // Archived items
+    private val _archivedItems = MutableStateFlow<List<ClothingItem>>(emptyList())
+    val archivedItems: StateFlow<List<ClothingItem>> = _archivedItems
+
     // Planned outfits — declared before init so todayPlannedItemIds() can access it
     private val _plannedOutfits = MutableStateFlow<List<PlannedOutfit>>(emptyList())
     val plannedOutfits: StateFlow<List<PlannedOutfit>> = _plannedOutfits
@@ -90,6 +94,17 @@ class WardrobeViewModel(
 
     fun updateItem(item: ClothingItem) {
         repository.updateItem(item)
+        refresh()
+    }
+
+    fun archiveItem(item: ClothingItem) {
+        repository.archiveItem(item)
+        purgeDeletedItemFromHistory(item.id)
+        refresh()
+    }
+
+    fun unarchiveItem(item: ClothingItem) {
+        repository.unarchiveItem(item)
         refresh()
     }
 
@@ -178,12 +193,13 @@ class WardrobeViewModel(
         groqJob?.cancel()
         groqJob = null
 
+        val activeItems = allItems.value.filter { !it.isArchived }
         val historySnapshot = recentOutfitHistory.toSet()
         val plannedIds = todayPlannedItemIds()
 
         // Step 1: Always run rule-based engine synchronously as fallback
         val fallback = recommendationEngine.recommend(
-            items = allItems.value,
+            items = activeItems,
             preferences = _userPreferences.value,
             recentlyShown = historySnapshot,
             plannedItemIds = plannedIds
@@ -199,11 +215,11 @@ class WardrobeViewModel(
             groqJob = viewModelScope.launch {
                 try {
                     val aiResults = groqService.recommend(
-                        items = allItems.value,
+                        items = activeItems,
                         preferences = _userPreferences.value
                     )
-                    // Replace stale item snapshots with current data and drop deleted items
-                    val currentItemsById = allItems.value.associateBy { it.id }
+                    // Replace stale item snapshots with current data and drop deleted/archived items
+                    val currentItemsById = activeItems.associateBy { it.id }
                     val cleanResults = aiResults.map { rec ->
                         rec.copy(
                             items = rec.items.mapNotNull { currentItemsById[it.id] },
@@ -271,13 +287,15 @@ class WardrobeViewModel(
     }
 
     private fun refresh() {
-        allItems.value = repository.getWardrobeItems()
+        allItems.value = repository.getWardrobeItems() + repository.getArchivedItems()
         applyFilters()
         refreshRecommendations()
     }
 
     private fun applyFilters() {
-        _wardrobeItems.value = allItems.value.filter { item ->
+        val (archived, active) = allItems.value.partition { it.isArchived }
+        _archivedItems.value = archived
+        _wardrobeItems.value = active.filter { item ->
             val seasonMatch =
                 selectedSeason.value == null || item.season == selectedSeason.value
 
