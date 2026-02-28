@@ -78,6 +78,20 @@ fun RecommendationScreen(
                     }
                 }
 
+                is RecommendationUiState.Unauthenticated -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Sign in to get personalized recommendations.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
                 is RecommendationUiState.Success -> {
                     if (state.recommendations.isEmpty()) {
                         Text(

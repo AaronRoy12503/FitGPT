@@ -15,6 +15,7 @@ import com.fitgpt.app.data.model.UserPreferences
 import java.time.LocalDate
 import java.time.LocalTime
 import com.fitgpt.app.data.PreferencesManager
+import com.fitgpt.app.data.auth.AuthManager
 import com.fitgpt.app.data.repository.FakeWardrobeRepository
 import com.fitgpt.app.data.repository.WardrobeRepository
 import kotlinx.coroutines.Job
@@ -25,7 +26,8 @@ import kotlinx.coroutines.launch
 class WardrobeViewModel(
     private val todayProvider: () -> LocalDate = { LocalDate.now() },
     private val hourProvider: () -> Int = { LocalTime.now().hour },
-    private val temperatureProvider: (() -> Int)? = null
+    private val temperatureProvider: (() -> Int)? = null,
+    private val authManager: AuthManager? = null
 ) : ViewModel() {
 
     private val repository: WardrobeRepository = FakeWardrobeRepository()
@@ -194,6 +196,16 @@ class WardrobeViewModel(
     }
 
     fun refreshRecommendations() {
+        // Auth guard: when an AuthManager is present, require a verified session
+        if (authManager != null) {
+            val session = authManager.getCurrentSession()
+            if (session == null || !session.isVerified || session.userId.isBlank()) {
+                _recommendationState.value = RecommendationUiState.Unauthenticated
+                _recommendations.value = emptyList()
+                return
+            }
+        }
+
         // Cancel any in-flight Groq request so stale results can't overwrite fresh data
         groqJob?.cancel()
         groqJob = null

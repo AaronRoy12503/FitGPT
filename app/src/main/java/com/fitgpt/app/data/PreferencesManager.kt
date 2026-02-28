@@ -4,10 +4,11 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.fitgpt.app.data.model.UserPreferences
 
-class PreferencesManager(context: Context) {
+class PreferencesManager(context: Context, private val userId: String? = null) {
 
+    private val prefName = if (userId != null) "fitgpt_prefs_$userId" else "fitgpt_prefs"
     private val prefs: SharedPreferences =
-        context.getSharedPreferences("fitgpt_prefs", Context.MODE_PRIVATE)
+        context.getSharedPreferences(prefName, Context.MODE_PRIVATE)
 
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)

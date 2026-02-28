@@ -4,6 +4,7 @@ import com.fitgpt.app.data.model.OutfitRecommendation
 
 sealed class RecommendationUiState {
     data object Loading : RecommendationUiState()
+    data object Unauthenticated : RecommendationUiState()
 
     data class Success(
         val recommendations: List<OutfitRecommendation>,
