@@ -9,8 +9,10 @@ import com.fitgpt.app.data.model.ClothingItem
 import com.fitgpt.app.data.model.OutfitRecommendation
 import com.fitgpt.app.data.model.PlannedOutfit
 import com.fitgpt.app.data.model.SavedOutfit
+import com.fitgpt.app.data.model.TimeCategory
 import com.fitgpt.app.data.model.UserPreferences
 import java.time.LocalDate
+import java.time.LocalTime
 import com.fitgpt.app.data.PreferencesManager
 import com.fitgpt.app.data.repository.FakeWardrobeRepository
 import com.fitgpt.app.data.repository.WardrobeRepository
@@ -20,7 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class WardrobeViewModel(
-    private val todayProvider: () -> LocalDate = { LocalDate.now() }
+    private val todayProvider: () -> LocalDate = { LocalDate.now() },
+    private val hourProvider: () -> Int = { LocalTime.now().hour }
 ) : ViewModel() {
 
     private val repository: WardrobeRepository = FakeWardrobeRepository()
@@ -196,13 +199,15 @@ class WardrobeViewModel(
         val activeItems = allItems.value.filter { !it.isArchived }
         val historySnapshot = recentOutfitHistory.toSet()
         val plannedIds = todayPlannedItemIds()
+        val timeCategory = TimeCategory.fromHour(hourProvider())
 
         // Step 1: Always run rule-based engine synchronously as fallback
         val fallback = recommendationEngine.recommend(
             items = activeItems,
             preferences = _userPreferences.value,
             recentlyShown = historySnapshot,
-            plannedItemIds = plannedIds
+            plannedItemIds = plannedIds,
+            timeCategory = timeCategory
         )
         // Record shown outfits immediately so next refresh won't repeat them
         recordShownOutfits(fallback)

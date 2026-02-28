@@ -3,6 +3,7 @@ package com.fitgpt.app.ai
 import com.fitgpt.app.data.model.ClothingCategory
 import com.fitgpt.app.data.model.ClothingItem
 import com.fitgpt.app.data.model.OutfitRecommendation
+import com.fitgpt.app.data.model.TimeCategory
 import com.fitgpt.app.data.model.UserPreferences
 
 class OutfitRecommendationEngine {
@@ -11,7 +12,8 @@ class OutfitRecommendationEngine {
         items: List<ClothingItem>,
         preferences: UserPreferences,
         recentlyShown: Set<Set<Int>> = emptySet(),
-        plannedItemIds: Set<Int> = emptySet()
+        plannedItemIds: Set<Int> = emptySet(),
+        timeCategory: TimeCategory? = null
     ): List<OutfitRecommendation> {
         if (items.isEmpty()) return emptyList()
 
@@ -32,7 +34,7 @@ class OutfitRecommendationEngine {
                 OutfitRecommendation(
                     items = listOf(item),
                     score = score,
-                    explanation = generateExplanation(listOf(item), score, preferences),
+                    explanation = generateExplanation(listOf(item), score, preferences, timeCategory),
                     itemExplanations = perItem
                 )
             }
@@ -54,14 +56,16 @@ class OutfitRecommendationEngine {
                 // Penalize outfits that heavily overlap with recently shown ones
                 val overlapPen = overlapPenalty(outfit, recentlyShown)
                 val plannerPen = plannerItemPenalty(outfit, plannedItemIds)
-                val adjustedScore = (baseScore - overlapPen - plannerPen).coerceAtLeast(0.01)
+                val timeBonus = timeContextScore(outfit, timeCategory) * WEIGHT_TIME
+                val totalPenalty = (overlapPen + plannerPen).coerceAtMost(MAX_CONTEXT_PENALTY)
+                val adjustedScore = (baseScore + timeBonus - totalPenalty).coerceAtLeast(0.01)
                 val perItem = outfit.associate { item ->
                     item.id to generateItemExplanation(item, preferences)
                 }
                 OutfitRecommendation(
                     items = outfit,
                     score = adjustedScore,
-                    explanation = generateExplanation(outfit, adjustedScore, preferences),
+                    explanation = generateExplanation(outfit, adjustedScore, preferences, timeCategory),
                     itemExplanations = perItem
                 )
             }
@@ -436,6 +440,69 @@ class OutfitRecommendationEngine {
         }
     }
 
+    // --- Time-based scoring ---
+
+    /**
+     * Infers a formality level (1–5) for a clothing item based on its category,
+     * fit, and color. Used by [timeContextScore] to align outfit formality with
+     * time of day.
+     */
+    internal fun inferFormality(item: ClothingItem): Int {
+        // Category base
+        val categoryBase = when (item.category.lowercase()) {
+            ClothingCategory.OUTERWEAR.lowercase() -> 4
+            ClothingCategory.ACCESSORY.lowercase() -> 2
+            else -> 3 // Top, Bottom, Shoes
+        }
+
+        // Fit modifier
+        val fitMod = when (item.fit.lowercase()) {
+            "fitted" -> 1
+            "oversized", "relaxed" -> -1
+            else -> 0 // "regular"
+        }
+
+        // Color modifier
+        val formalColors = setOf("black", "navy", "gray", "grey")
+        val casualColors = setOf("yellow", "orange", "pink", "coral", "mint", "peach")
+        val colorMod = when (item.color.lowercase()) {
+            in formalColors -> 1
+            in casualColors -> -1
+            else -> 0
+        }
+
+        return (categoryBase + fitMod + colorMod).coerceIn(1, 5)
+    }
+
+    /**
+     * Scores how well an outfit's average formality matches the given time
+     * category's ideal range.
+     *
+     * Returns a value in [0.0, 1.0]:
+     * - 1.0 when average formality falls within the time category's ideal range
+     * - Decreases by 0.25 per unit of distance outside the range
+     * - 0.0 minimum
+     *
+     * Returns 0.0 when [timeCategory] is null or the outfit is empty (backward
+     * compat — zero contribution to the scoring formula).
+     */
+    internal fun timeContextScore(
+        outfit: List<ClothingItem>,
+        timeCategory: TimeCategory?
+    ): Double {
+        if (timeCategory == null || outfit.isEmpty()) return 0.0
+
+        val avgFormality = outfit.sumOf { inferFormality(it) }.toDouble() / outfit.size
+
+        val distance = when {
+            avgFormality < timeCategory.idealFormalityMin -> timeCategory.idealFormalityMin - avgFormality
+            avgFormality > timeCategory.idealFormalityMax -> avgFormality - timeCategory.idealFormalityMax
+            else -> 0.0
+        }
+
+        return (1.0 - 0.25 * distance).coerceAtLeast(0.0)
+    }
+
     // --- Outfit combination builder ---
 
     private fun buildOutfitCombinations(
@@ -490,9 +557,21 @@ class OutfitRecommendationEngine {
     private fun generateExplanation(
         outfit: List<ClothingItem>,
         score: Double,
-        preferences: UserPreferences
+        preferences: UserPreferences,
+        timeCategory: TimeCategory? = null
     ): String {
         val parts = mutableListOf<String>()
+
+        // Time-of-day note (only when timeCategory is provided)
+        if (timeCategory != null && outfit.isNotEmpty()) {
+            val timeNote = when (timeCategory) {
+                TimeCategory.MORNING -> "Relaxed morning-ready look"
+                TimeCategory.AFTERNOON -> "Versatile daytime ensemble"
+                TimeCategory.EVENING -> "Polished for the evening"
+                TimeCategory.NIGHT -> "Comfortable late-night pick"
+            }
+            parts.add(timeNote)
+        }
 
         // Lead with color harmony — highest-weighted outfit factor
         val harmonyLabel = colorHarmonyLabel(outfit)
@@ -631,5 +710,7 @@ class OutfitRecommendationEngine {
         internal const val WEIGHT_COVERAGE = 0.10
         internal const val WEIGHT_DIVERSITY = 0.15
         internal const val WEIGHT_PLANNER = 0.25
+        internal const val WEIGHT_TIME = 0.10
+        internal const val MAX_CONTEXT_PENALTY = 0.40
     }
 }

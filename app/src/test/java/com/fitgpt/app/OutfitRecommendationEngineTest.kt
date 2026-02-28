@@ -845,4 +845,18 @@ class OutfitRecommendationEngineTest {
             OutfitRecommendationEngine.MAX_HISTORY_SIZE <= 50
         )
     }
+
+    // -----------------------------------------------------------------------
+    // Context penalty cap
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun weights_contextPenaltyCap_coversAllPenalties() {
+        val maxPossiblePenalty = OutfitRecommendationEngine.WEIGHT_DIVERSITY +
+            OutfitRecommendationEngine.WEIGHT_PLANNER
+        assertTrue(
+            "MAX_CONTEXT_PENALTY should cover combined diversity + planner penalties",
+            OutfitRecommendationEngine.MAX_CONTEXT_PENALTY >= maxPossiblePenalty
+        )
+    }
 }
