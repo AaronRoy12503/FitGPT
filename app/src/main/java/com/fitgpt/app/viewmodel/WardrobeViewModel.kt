@@ -203,6 +203,10 @@ class WardrobeViewModel(
         val plannedIds = todayPlannedItemIds()
         val timeCategory = TimeCategory.fromHour(hourProvider())
         val temperatureCategory = temperatureProvider?.let { TemperatureCategory.fromCelsius(it()) }
+        val savedIds = repository.getSavedOutfits()
+            .map { outfit -> outfit.items.map { it.id }.toSet() }
+            .filter { it.isNotEmpty() }
+            .toSet()
 
         // Step 1: Always run rule-based engine synchronously as fallback
         val fallback = recommendationEngine.recommend(
@@ -211,7 +215,8 @@ class WardrobeViewModel(
             recentlyShown = historySnapshot,
             plannedItemIds = plannedIds,
             timeCategory = timeCategory,
-            temperatureCategory = temperatureCategory
+            temperatureCategory = temperatureCategory,
+            savedOutfitIds = savedIds
         )
         // Record shown outfits immediately so next refresh won't repeat them
         recordShownOutfits(fallback)

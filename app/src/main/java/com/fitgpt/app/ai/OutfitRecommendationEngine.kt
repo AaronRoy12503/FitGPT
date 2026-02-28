@@ -15,7 +15,8 @@ class OutfitRecommendationEngine {
         recentlyShown: Set<Set<Int>> = emptySet(),
         plannedItemIds: Set<Int> = emptySet(),
         timeCategory: TimeCategory? = null,
-        temperatureCategory: TemperatureCategory? = null
+        temperatureCategory: TemperatureCategory? = null,
+        savedOutfitIds: Set<Set<Int>> = emptySet()
     ): List<OutfitRecommendation> {
         if (items.isEmpty()) return emptyList()
 
@@ -61,8 +62,9 @@ class OutfitRecommendationEngine {
                 val timeBonus = timeContextScore(outfit, timeCategory) * WEIGHT_TIME
                 val tempComfortBonus = temperatureComfortBonus(outfit, temperatureCategory) * WEIGHT_TEMPERATURE
                 val freshnessBonus = freshnessScore(outfit, recentlyShown) * WEIGHT_FRESHNESS
+                val savedBonus = savedOutfitBonus(outfit, savedOutfitIds) * WEIGHT_SAVED
                 val totalPenalty = (overlapPen + plannerPen).coerceAtMost(MAX_CONTEXT_PENALTY)
-                val adjustedScore = (baseScore + timeBonus + tempComfortBonus + freshnessBonus - totalPenalty).coerceAtLeast(0.01)
+                val adjustedScore = (baseScore + timeBonus + tempComfortBonus + freshnessBonus + savedBonus - totalPenalty).coerceAtLeast(0.01)
                 val perItem = outfit.associate { item ->
                     item.id to generateItemExplanation(item, preferences)
                 }
@@ -153,6 +155,35 @@ class OutfitRecommendationEngine {
         val overlapCount = outfitIds.intersect(plannedItemIds).size
         val overlapRatio = overlapCount.toDouble() / outfitIds.size.coerceAtLeast(1)
         return overlapRatio * WEIGHT_PLANNER
+    }
+
+    /**
+     * Rewards outfits that reuse items from the user's saved (favorite) outfits
+     * while suggesting novel combinations. Exact saved combinations get no bonus
+     * (the user already has them saved — suggest something new instead).
+     *
+     * Returns a value in [0.0, 1.0]:
+     * - 0.0 when outfit is an exact saved combination or has no overlap
+     * - Proportional to how many items appear in any saved outfit
+     *
+     * Multiplied by [WEIGHT_SAVED] in the scoring formula.
+     */
+    internal fun savedOutfitBonus(
+        outfit: List<ClothingItem>,
+        savedOutfitIds: Set<Set<Int>>
+    ): Double {
+        if (savedOutfitIds.isEmpty() || outfit.isEmpty()) return 0.0
+
+        val outfitIds = outfit.map { it.id }.toSet()
+
+        // Exact saved combination → no bonus (user already has this; suggest novelty)
+        if (outfitIds in savedOutfitIds) return 0.0
+
+        // Bonus proportional to how many items appear in any saved outfit
+        val savedItemIds = savedOutfitIds.flatten().toSet()
+        val favoriteCount = outfitIds.count { it in savedItemIds }
+
+        return favoriteCount.toDouble() / outfitIds.size.coerceAtLeast(1)
     }
 
     /**
@@ -812,6 +843,7 @@ class OutfitRecommendationEngine {
         internal const val WEIGHT_TIME = 0.10
         internal const val WEIGHT_TEMPERATURE = 0.10
         internal const val WEIGHT_FRESHNESS = 0.15
+        internal const val WEIGHT_SAVED = 0.08
         internal const val NEAR_DUPLICATE_THRESHOLD = 0.75
         internal const val TEMPERATURE_SUITABILITY_FLOOR = 0.05
         internal const val MAX_CONTEXT_PENALTY = 0.40
