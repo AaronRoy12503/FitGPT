@@ -9,6 +9,7 @@ import com.fitgpt.app.data.model.ClothingItem
 import com.fitgpt.app.data.model.OutfitRecommendation
 import com.fitgpt.app.data.model.PlannedOutfit
 import com.fitgpt.app.data.model.SavedOutfit
+import com.fitgpt.app.data.model.TemperatureCategory
 import com.fitgpt.app.data.model.TimeCategory
 import com.fitgpt.app.data.model.UserPreferences
 import java.time.LocalDate
@@ -23,7 +24,8 @@ import kotlinx.coroutines.launch
 
 class WardrobeViewModel(
     private val todayProvider: () -> LocalDate = { LocalDate.now() },
-    private val hourProvider: () -> Int = { LocalTime.now().hour }
+    private val hourProvider: () -> Int = { LocalTime.now().hour },
+    private val temperatureProvider: (() -> Int)? = null
 ) : ViewModel() {
 
     private val repository: WardrobeRepository = FakeWardrobeRepository()
@@ -200,6 +202,7 @@ class WardrobeViewModel(
         val historySnapshot = recentOutfitHistory.toSet()
         val plannedIds = todayPlannedItemIds()
         val timeCategory = TimeCategory.fromHour(hourProvider())
+        val temperatureCategory = temperatureProvider?.let { TemperatureCategory.fromCelsius(it()) }
 
         // Step 1: Always run rule-based engine synchronously as fallback
         val fallback = recommendationEngine.recommend(
@@ -207,7 +210,8 @@ class WardrobeViewModel(
             preferences = _userPreferences.value,
             recentlyShown = historySnapshot,
             plannedItemIds = plannedIds,
-            timeCategory = timeCategory
+            timeCategory = timeCategory,
+            temperatureCategory = temperatureCategory
         )
         // Record shown outfits immediately so next refresh won't repeat them
         recordShownOutfits(fallback)

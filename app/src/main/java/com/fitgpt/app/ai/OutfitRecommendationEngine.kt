@@ -3,6 +3,7 @@ package com.fitgpt.app.ai
 import com.fitgpt.app.data.model.ClothingCategory
 import com.fitgpt.app.data.model.ClothingItem
 import com.fitgpt.app.data.model.OutfitRecommendation
+import com.fitgpt.app.data.model.TemperatureCategory
 import com.fitgpt.app.data.model.TimeCategory
 import com.fitgpt.app.data.model.UserPreferences
 
@@ -13,7 +14,8 @@ class OutfitRecommendationEngine {
         preferences: UserPreferences,
         recentlyShown: Set<Set<Int>> = emptySet(),
         plannedItemIds: Set<Int> = emptySet(),
-        timeCategory: TimeCategory? = null
+        timeCategory: TimeCategory? = null,
+        temperatureCategory: TemperatureCategory? = null
     ): List<OutfitRecommendation> {
         if (items.isEmpty()) return emptyList()
 
@@ -29,12 +31,12 @@ class OutfitRecommendationEngine {
         // If we couldn't form any multi-item outfits, fall back to scoring individual items
         if (allCombinations.isEmpty()) {
             return items.map { item ->
-                val score = scoreItem(item, preferences)
+                val score = scoreItem(item, preferences, temperatureCategory)
                 val perItem = mapOf(item.id to generateItemExplanation(item, preferences))
                 OutfitRecommendation(
                     items = listOf(item),
                     score = score,
-                    explanation = generateExplanation(listOf(item), score, preferences, timeCategory),
+                    explanation = generateExplanation(listOf(item), score, preferences, timeCategory, temperatureCategory),
                     itemExplanations = perItem
                 )
             }
@@ -52,20 +54,21 @@ class OutfitRecommendationEngine {
 
         val scored = outfitCombinations
             .map { outfit ->
-                val baseScore = scoreOutfit(outfit, preferences)
+                val baseScore = scoreOutfit(outfit, preferences, temperatureCategory)
                 // Penalize outfits that heavily overlap with recently shown ones
                 val overlapPen = overlapPenalty(outfit, recentlyShown)
                 val plannerPen = plannerItemPenalty(outfit, plannedItemIds)
                 val timeBonus = timeContextScore(outfit, timeCategory) * WEIGHT_TIME
+                val tempComfortBonus = temperatureComfortBonus(outfit, temperatureCategory) * WEIGHT_TEMPERATURE
                 val totalPenalty = (overlapPen + plannerPen).coerceAtMost(MAX_CONTEXT_PENALTY)
-                val adjustedScore = (baseScore + timeBonus - totalPenalty).coerceAtLeast(0.01)
+                val adjustedScore = (baseScore + timeBonus + tempComfortBonus - totalPenalty).coerceAtLeast(0.01)
                 val perItem = outfit.associate { item ->
                     item.id to generateItemExplanation(item, preferences)
                 }
                 OutfitRecommendation(
                     items = outfit,
                     score = adjustedScore,
-                    explanation = generateExplanation(outfit, adjustedScore, preferences, timeCategory),
+                    explanation = generateExplanation(outfit, adjustedScore, preferences, timeCategory, temperatureCategory),
                     itemExplanations = perItem
                 )
             }
@@ -185,25 +188,65 @@ class OutfitRecommendationEngine {
 
     // --- Scoring ---
 
-    internal fun scoreItem(item: ClothingItem, preferences: UserPreferences): Double {
+    internal fun scoreItem(
+        item: ClothingItem,
+        preferences: UserPreferences,
+        temperatureCategory: TemperatureCategory? = null
+    ): Double {
         val seasonScore = seasonMatchScore(item, preferences) * WEIGHT_SEASON
         val comfortScore = comfortMatchScore(item, preferences) * WEIGHT_COMFORT
         val styleScore = styleMatchScore(item, preferences) * WEIGHT_STYLE
         val fitScore = bodyTypeFitScore(item, preferences) * WEIGHT_FIT
-        return seasonScore + comfortScore + styleScore + fitScore
+        val rawScore = seasonScore + comfortScore + styleScore + fitScore
+        val tempMultiplier = temperatureSeasonScore(item, temperatureCategory)
+        return rawScore * tempMultiplier
     }
 
     internal fun scoreOutfit(
         outfit: List<ClothingItem>,
-        preferences: UserPreferences
+        preferences: UserPreferences,
+        temperatureCategory: TemperatureCategory? = null
     ): Double {
         if (outfit.isEmpty()) return 0.0
 
-        val avgItemScore = outfit.sumOf { scoreItem(it, preferences) } / outfit.size
+        val avgItemScore = outfit.sumOf { scoreItem(it, preferences, temperatureCategory) } / outfit.size
         val harmonyBonus = colorHarmonyBonus(outfit)
         val coverageBonus = categoryDiversityBonus(outfit)
 
         return avgItemScore + (harmonyBonus * WEIGHT_HARMONY) + (coverageBonus * WEIGHT_COVERAGE)
+    }
+
+    // --- Temperature ---
+
+    /**
+     * Returns a multiplicative factor for how well an item's season matches the
+     * current temperature category. Returns 1.0 (no effect) when [temperatureCategory]
+     * is null. Suitability is floored at [TEMPERATURE_SUITABILITY_FLOOR] to prevent
+     * zero-score items from being completely excluded.
+     */
+    internal fun temperatureSeasonScore(
+        item: ClothingItem,
+        temperatureCategory: TemperatureCategory?
+    ): Double {
+        if (temperatureCategory == null) return 1.0
+        return temperatureCategory.seasonSuitability(item.season)
+            .coerceAtLeast(TEMPERATURE_SUITABILITY_FLOOR)
+    }
+
+    /**
+     * Returns a comfort bonus for extreme temperatures (COLD/HOT). The bonus
+     * rewards high-comfort items when the weather is harsh. Normalized to [0.0, 1.0],
+     * then multiplied by [WEIGHT_TEMPERATURE] in the scoring formula.
+     *
+     * Returns 0.0 when [temperatureCategory] is null, non-extreme, or outfit is empty.
+     */
+    internal fun temperatureComfortBonus(
+        outfit: List<ClothingItem>,
+        temperatureCategory: TemperatureCategory?
+    ): Double {
+        if (temperatureCategory == null || !temperatureCategory.isExtreme || outfit.isEmpty()) return 0.0
+        val avgComfort = outfit.sumOf { it.comfortLevel }.toDouble() / outfit.size
+        return ((avgComfort - 1.0) / 4.0).coerceIn(0.0, 1.0)
     }
 
     // --- Season ---
@@ -558,9 +601,22 @@ class OutfitRecommendationEngine {
         outfit: List<ClothingItem>,
         score: Double,
         preferences: UserPreferences,
-        timeCategory: TimeCategory? = null
+        timeCategory: TimeCategory? = null,
+        temperatureCategory: TemperatureCategory? = null
     ): String {
         val parts = mutableListOf<String>()
+
+        // Temperature note (only when temperatureCategory is provided)
+        if (temperatureCategory != null && outfit.isNotEmpty()) {
+            val tempNote = when (temperatureCategory) {
+                TemperatureCategory.COLD -> "Selected for cold weather comfort"
+                TemperatureCategory.COOL -> "Light layers for cool conditions"
+                TemperatureCategory.MILD -> "Suited for mild temperatures"
+                TemperatureCategory.WARM -> "Breathable choices for warm weather"
+                TemperatureCategory.HOT -> "Lightweight picks to beat the heat"
+            }
+            parts.add(tempNote)
+        }
 
         // Time-of-day note (only when timeCategory is provided)
         if (timeCategory != null && outfit.isNotEmpty()) {
@@ -711,6 +767,8 @@ class OutfitRecommendationEngine {
         internal const val WEIGHT_DIVERSITY = 0.15
         internal const val WEIGHT_PLANNER = 0.25
         internal const val WEIGHT_TIME = 0.10
+        internal const val WEIGHT_TEMPERATURE = 0.10
+        internal const val TEMPERATURE_SUITABILITY_FLOOR = 0.05
         internal const val MAX_CONTEXT_PENALTY = 0.40
     }
 }
