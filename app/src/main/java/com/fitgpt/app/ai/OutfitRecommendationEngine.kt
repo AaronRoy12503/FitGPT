@@ -63,8 +63,10 @@ class OutfitRecommendationEngine {
                 val tempComfortBonus = temperatureComfortBonus(outfit, temperatureCategory) * WEIGHT_TEMPERATURE
                 val freshnessBonus = freshnessScore(outfit, recentlyShown) * WEIGHT_FRESHNESS
                 val savedBonus = savedOutfitBonus(outfit, savedOutfitIds) * WEIGHT_SAVED
+                val fitCompatBonus = outfitFitScore(outfit, preferences) * WEIGHT_FIT_COMPAT
+                val fitPen = fitMismatchPenalty(outfit, preferences)
                 val totalPenalty = (overlapPen + plannerPen).coerceAtMost(MAX_CONTEXT_PENALTY)
-                val adjustedScore = (baseScore + timeBonus + tempComfortBonus + freshnessBonus + savedBonus - totalPenalty).coerceAtLeast(0.01)
+                val adjustedScore = (baseScore + timeBonus + tempComfortBonus + freshnessBonus + savedBonus + fitCompatBonus - totalPenalty - fitPen).coerceAtLeast(0.01)
                 val perItem = outfit.associate { item ->
                     item.id to generateItemExplanation(item, preferences)
                 }
@@ -184,6 +186,87 @@ class OutfitRecommendationEngine {
         val favoriteCount = outfitIds.count { it in savedItemIds }
 
         return favoriteCount.toDouble() / outfitIds.size.coerceAtLeast(1)
+    }
+
+    // --- Fit compatibility ---
+
+    /**
+     * Returns how compatible a garment's fit is with the given body type.
+     * Values range from 0.3 (poor match) to 1.0 (ideal match).
+     *
+     * "Regular" fit is always safe (0.7–0.8), ensuring default items never
+     * break the recommendation flow. Unknown fits and body types default
+     * to 0.7 (neutral baseline).
+     */
+    internal fun fitCompatibility(fit: String, bodyType: String): Double {
+        val f = fit.lowercase()
+        val b = bodyType.lowercase()
+        return when (b) {
+            "slim" -> when (f) {
+                "fitted" -> 1.0
+                "regular" -> 0.7
+                "oversized" -> 0.6
+                "relaxed" -> 0.5
+                else -> 0.7
+            }
+            "athletic" -> when (f) {
+                "fitted" -> 1.0
+                "regular" -> 0.8
+                "relaxed" -> 0.5
+                "oversized" -> 0.3
+                else -> 0.7
+            }
+            "plus-size" -> when (f) {
+                "relaxed" -> 1.0
+                "oversized" -> 0.8
+                "regular" -> 0.7
+                "fitted" -> 0.3
+                else -> 0.7
+            }
+            "average" -> when (f) {
+                "regular" -> 0.8
+                "fitted" -> 0.7
+                "relaxed" -> 0.7
+                "oversized" -> 0.6
+                else -> 0.7
+            }
+            else -> 0.7 // unknown body type — neutral baseline
+        }
+    }
+
+    /**
+     * Returns the average fit compatibility across all items in the outfit.
+     * Higher scores mean the outfit's garment fits are well-suited to the
+     * user's body type.
+     *
+     * Returns 0.0 for empty outfits.
+     */
+    internal fun outfitFitScore(
+        outfit: List<ClothingItem>,
+        preferences: UserPreferences
+    ): Double {
+        if (outfit.isEmpty()) return 0.0
+        return outfit.sumOf { fitCompatibility(it.fit, preferences.bodyType) } / outfit.size
+    }
+
+    /**
+     * Penalizes outfits containing items whose fit is strongly mismatched
+     * with the user's body type (compatibility below [FIT_MISMATCH_THRESHOLD]).
+     *
+     * The penalty is proportional to the fraction of mismatched items,
+     * scaled by [WEIGHT_FIT_PENALTY]. Applied separately from the context
+     * penalty cap so fit mismatches always have effect.
+     */
+    internal fun fitMismatchPenalty(
+        outfit: List<ClothingItem>,
+        preferences: UserPreferences
+    ): Double {
+        if (outfit.isEmpty()) return 0.0
+        val mismatchCount = outfit.count {
+            fitCompatibility(it.fit, preferences.bodyType) < FIT_MISMATCH_THRESHOLD
+        }
+        val mismatchRatio = mismatchCount.toDouble() / outfit.size
+        return mismatchRatio * WEIGHT_FIT_PENALTY
     }
 
     /**
@@ -723,6 +806,13 @@ class OutfitRecommendationEngine {
         }
         if (fitInsight != null) parts.add(fitInsight)
 
+        // Fit compatibility note
+        val fitCompat = outfitFitScore(outfit, preferences)
+        when {
+            fitCompat >= 0.9 -> parts.add("Excellent fit choices for your ${preferences.bodyType.lowercase()} build")
+            fitCompat < FIT_MISMATCH_THRESHOLD -> parts.add("Consider trying different fits for your frame")
+        }
+
         // Add season or comfort only when noteworthy (avoid generic filler)
         val seasons = outfit.map { it.season }.toSet()
         val allSeasonMatch = seasons.all { it.equals("All", ignoreCase = true) }
@@ -844,6 +934,9 @@ class OutfitRecommendationEngine {
         internal const val WEIGHT_TEMPERATURE = 0.10
         internal const val WEIGHT_FRESHNESS = 0.15
         internal const val WEIGHT_SAVED = 0.08
+        internal const val WEIGHT_FIT_COMPAT = 0.12
+        internal const val WEIGHT_FIT_PENALTY = 0.15
+        internal const val FIT_MISMATCH_THRESHOLD = 0.4
         internal const val NEAR_DUPLICATE_THRESHOLD = 0.75
         internal const val TEMPERATURE_SUITABILITY_FLOOR = 0.05
         internal const val MAX_CONTEXT_PENALTY = 0.40
