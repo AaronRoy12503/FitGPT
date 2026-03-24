@@ -53,7 +53,7 @@ def _ensure_runtime_schema() -> None:
         if "layer_type" not in clothing_columns:
             pending_alters.append("ALTER TABLE clothing_items ADD COLUMN layer_type VARCHAR")
         if "is_one_piece" not in clothing_columns:
-            pending_alters.append("ALTER TABLE clothing_items ADD COLUMN is_one_piece BOOLEAN DEFAULT 0")
+            pending_alters.append("ALTER TABLE clothing_items ADD COLUMN is_one_piece BOOLEAN DEFAULT FALSE")
         if "set_identifier" not in clothing_columns:
             pending_alters.append("ALTER TABLE clothing_items ADD COLUMN set_identifier VARCHAR")
         if "style_tags_json" not in clothing_columns:
