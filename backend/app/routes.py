@@ -1048,13 +1048,14 @@ def chat_with_ai(
 
 
 @router.post("/chat", response_model=schemas.ChatResponse)
-def chat_with_ai_alias(
-    payload: schemas.ChatRequest,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    """Compatibility alias for web clients expecting /chat."""
-    return chat_with_ai(payload=payload, db=db, current_user=current_user)
+def chat_endpoint(payload: schemas.ChatRequest):
+    """Public chat endpoint for AURA — no auth required."""
+    from app.chat_service import get_chat_response
+    messages = [{"role": m.role, "content": m.content} for m in payload.messages]
+    reply = get_chat_response(messages)
+    if reply is None:
+        return {"reply": "Sorry, the assistant is unavailable right now. Please try again later.", "source": "fallback", "fallback_used": True}
+    return {"reply": reply, "source": "groq", "fallback_used": False}
 
 
 @router.post("/ai/recommendations", response_model=schemas.AiRecommendationResponse)
